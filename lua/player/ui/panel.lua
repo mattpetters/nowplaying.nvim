@@ -1,0 +1,474 @@
+local config = require("player.config")
+local state = require("player.state")
+
+local M = {}
+
+local buf, win
+local current_width, current_height
+local current_image -- Track current image object for cleanup
+local last_artwork_path -- Track the last artwork path to avoid re-rendering
+
+local function clear_current_image()
+  if current_image then
+    pcall(function()
+      current_image:clear()
+    end)
+    current_image = nil
+  end
+end
+
+local function is_valid_window()
+  return win and vim.api.nvim_win_is_valid(win)
+end
+
+function M.is_open()
+  return is_valid_window()
+end
+
+local function try_render_image(artwork_path)
+  -- Try to use image.nvim if available
+  local ok, image_nvim = pcall(require, "image")
+  if not ok or not image_nvim then
+    return nil -- Fall back to ASCII
+  end
+
+  -- Verify file exists before trying to render
+  local utils = require("player.utils")
+  if not utils.file_exists(artwork_path) then
+    return nil -- File doesn't exist yet, fall back to ASCII
+  end
+
+  -- Always clear the previous image before re-rendering to avoid duplicates
+  if current_image then
+    clear_current_image()
+  end
+
+  last_artwork_path = artwork_path
+
+  -- Create new image with absolute geometry
+  -- Need to defer until window position is stable
+  vim.defer_fn(function()
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then
+      return
+    end
+    if not win or not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    -- Verify we're still showing the same artwork
+    if last_artwork_path ~= artwork_path then
+      return
+    end
+
+    -- Create and render new image with inline mode
+    -- For inline mode: x is column (0-based), y is line number (1-based) in the buffer
+    -- The image should appear starting at line 2 (empty line after title)
+    local panel_cfg = config.get().panel
+    local panel_width = (vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_width(win)) or current_width or panel_cfg.width or 60
+    local artwork_cfg = (panel_cfg.elements or {}).artwork or {}
+    local img_width = artwork_cfg.width or 20
+    local img_height = artwork_cfg.height or 10
+    -- Center the image horizontally
+    local x_offset = math.max(0, math.floor((panel_width - img_width) / 2))
+
+    local img = image_nvim.from_file(artwork_path, {
+      window = win,
+      buffer = buf,
+      inline = true,
+      x = x_offset,
+      y = 2,
+      width = img_width,
+      height = img_height,
+    })
+
+    if img then
+      current_image = img
+      img:render()
+
+      -- Lock cursor position after image renders to prevent jumping
+      vim.schedule(function()
+        if win and vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_set_cursor(win, { 1, 0 })
+        end
+      end)
+    end
+  end, 150) -- Slightly longer delay for window stabilization
+
+  return true
+end
+
+local function truncate_text(text, max_width)
+  if not text then
+    return ""
+  end
+  if #text <= max_width then
+    return text
+  end
+  return text:sub(1, max_width - 3) .. "..."
+end
+
+local function center_text(text, width)
+  local text_len = #text
+  if text_len >= width then
+    return text
+  end
+  local padding = math.floor((width - text_len) / 2)
+  return string.rep(" ", padding) .. text
+end
+
+local function format_time(seconds)
+  if not seconds then
+    return "?:??"
+  end
+  local s = math.floor(tonumber(seconds) or 0)
+  local m = math.floor(s / 60)
+  local rem = s % 60
+  return string.format("%d:%02d", m, rem)
+end
+
+local function progress_bar(position, duration, width)
+  width = width or 28
+  if not position or not duration or duration == 0 then
+    return string.rep("░", width)
+  end
+  local ratio = math.min(math.max(position / duration, 0), 1)
+  local filled = math.max(0, math.floor(width * ratio))
+  return string.rep("█", filled) .. string.rep("░", width - filled)
+end
+
+local function compute_content_height(state_snapshot)
+  local panel_cfg = config.get().panel
+  local elements = panel_cfg.elements or {}
+  local artwork_cfg = elements.artwork or {}
+
+  if not state_snapshot or state_snapshot.status == "inactive" then
+    return 2
+  end
+
+  local height = 0
+  height = height + 1 -- title line
+  height = height + 1 -- blank after title
+
+  if artwork_cfg.enabled then
+    height = height + (artwork_cfg.height or 10)
+  end
+
+  height = height + 1 -- blank line after artwork (always added)
+
+  if elements.track_title then
+    height = height + 1
+  end
+  if elements.artist then
+    height = height + 1
+  end
+  if elements.album then
+    height = height + 1
+  end
+
+  local playback_info = elements.progress_bar or elements.volume or elements.controls
+  if playback_info then
+    height = height + 1 -- blank before playback info
+  end
+
+  if elements.progress_bar then
+    height = height + 1
+  end
+
+  if elements.volume then
+    height = height + 1
+  end
+
+  if elements.controls then
+    height = height + 1 -- blank before controls block
+    height = height + 3 -- control lines
+  end
+
+  return math.max(height, 3)
+end
+
+local function resolve_dimensions(state_snapshot)
+  local panel_cfg = config.get().panel
+  local width = panel_cfg.width or 60
+  width = math.max(20, math.min(width, vim.o.columns - 4))
+
+  local height
+  if panel_cfg.height then
+    height = panel_cfg.height
+  else
+    height = compute_content_height(state_snapshot)
+  end
+
+  height = math.max(5, math.min(height, vim.o.lines - 4))
+  return width, height
+end
+
+local function render(state_snapshot)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  -- Temporarily make buffer modifiable for updates
+  vim.api.nvim_buf_set_option(buf, "modifiable", true)
+  vim.api.nvim_buf_set_option(buf, "readonly", false)
+
+  local lines = {}
+  local panel_cfg = config.get().panel
+  local panel_width = (is_valid_window() and vim.api.nvim_win_get_width(win)) or current_width or panel_cfg.width or 60
+
+  if not state_snapshot or state_snapshot.status == "inactive" then
+    table.insert(lines, center_text("NowPlaying.nvim", panel_width))
+    table.insert(lines, center_text("No active player", panel_width))
+  else
+    local track = state_snapshot.track or {}
+    local status_icon = state_snapshot.status == "playing" and "▶" or "⏸"
+    local title_line = string.format(
+      "NowPlaying.nvim  │  Player: %s %s",
+      state_snapshot.player_label or require("player.utils").format_provider(state_snapshot.player),
+      status_icon
+    )
+    table.insert(lines, center_text(title_line, panel_width))
+    table.insert(lines, "")
+
+    -- Try to render real image if available and enabled
+    local cfg = (panel_cfg.elements or {}).artwork or {}
+    if cfg.enabled and state_snapshot.artwork and state_snapshot.artwork.path then
+      if try_render_image(state_snapshot.artwork.path) then
+        -- Reserve space for the image
+        for _ = 1, (cfg.height or 10) do
+          table.insert(lines, "")
+        end
+      end
+    else
+      -- Artwork disabled or missing; clear any existing image
+      clear_current_image()
+      last_artwork_path = nil
+    end
+
+    table.insert(lines, "")
+    -- Truncate and center text
+    local max_text_width = math.max(panel_width - 10, 20)  -- Leave room for labels and padding
+    local panel_elements = panel_cfg.elements or {}
+
+    if panel_elements.track_title then
+      local track_line = "Track : " .. truncate_text(track.title or "Unknown", max_text_width)
+      table.insert(lines, center_text(track_line, panel_width))
+    end
+
+    if panel_elements.artist then
+      local artist_line = "Artist: " .. truncate_text(track.artist or "Unknown", max_text_width)
+      table.insert(lines, center_text(artist_line, panel_width))
+    end
+
+    if panel_elements.album then
+      local album_line = "Album : " .. truncate_text(track.album or "Unknown", max_text_width)
+      table.insert(lines, center_text(album_line, panel_width))
+    end
+    local show_playback_info = panel_elements.progress_bar or panel_elements.volume or panel_elements.controls
+    if show_playback_info then
+      table.insert(lines, "")
+    end
+
+    if panel_elements.progress_bar then
+      local pos = format_time(state_snapshot.position)
+      local dur = format_time(track.duration)
+      -- Calculate progress bar width: panel_width - time display - brackets - padding
+      -- Format: "[████████████] 2:30 / 4:15"
+      local time_display = string.format("%s / %s", pos, dur)
+      local progress_bar_width = panel_width - #time_display - 4  -- 4 for "[] " + space
+      progress_bar_width = math.max(progress_bar_width, 20)  -- Minimum width
+      local progress_line = string.format("[%s] %s", progress_bar(state_snapshot.position, track.duration, progress_bar_width), time_display)
+      table.insert(lines, center_text(progress_line, panel_width))
+    end
+
+    if panel_elements.volume then
+      local volume_line = "Volume: " .. (state_snapshot.volume and tostring(math.floor(state_snapshot.volume)) .. "%" or "?")
+      table.insert(lines, center_text(volume_line, panel_width))
+    end
+
+    if panel_elements.controls then
+      table.insert(lines, "")
+      local controls = "Controls: [p]play/pause [n]next [b]back"
+      table.insert(lines, center_text(controls, panel_width))
+      local controls2 = "[+/=]vol+ [-]vol- [l/>]seek+ [h/<]seek-"
+      table.insert(lines, center_text(controls2, panel_width))
+      local controls3 = "[r]refresh [q]close"
+      table.insert(lines, center_text(controls3, panel_width))
+    end
+  end
+
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+  -- Lock cursor to top-left position
+  if win and vim.api.nvim_win_is_valid(win) then
+    vim.api.nvim_win_set_cursor(win, { 1, 0 })
+  end
+
+  -- Make buffer readonly again to prevent scrolling and editing
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.api.nvim_buf_set_option(buf, "readonly", true)
+end
+
+local function ensure_keymaps()
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  local opts = { silent = true, nowait = true, buffer = buf }
+
+  -- Playback controls
+  vim.keymap.set("n", "q", M.close, opts)
+  vim.keymap.set("n", "p", function()
+    state.play_pause()
+  end, opts)
+  vim.keymap.set("n", "n", function()
+    state.next_track()
+  end, opts)
+  vim.keymap.set("n", "b", function()
+    state.previous_track()
+  end, opts)
+  vim.keymap.set("n", "+", function()
+    state.volume_up()
+  end, opts)
+  vim.keymap.set("n", "=", function()
+    state.volume_up()
+  end, opts)
+  vim.keymap.set("n", "-", function()
+    state.volume_down()
+  end, opts)
+  vim.keymap.set("n", "r", function()
+    state.refresh()
+  end, opts)
+  vim.keymap.set("n", ">", function()
+    local ok, err = state.seek(5)
+    if not ok then
+      vim.notify("Seek forward failed: " .. tostring(err), vim.log.levels.ERROR)
+    end
+  end, opts)
+  vim.keymap.set("n", "<", function()
+    local ok, err = state.seek(-5)
+    if not ok then
+      vim.notify("Seek backward failed: " .. tostring(err), vim.log.levels.ERROR)
+    end
+  end, opts)
+  vim.keymap.set("n", "l", function()
+    local ok, err = state.seek(5)
+    if not ok then
+      vim.notify("Seek forward failed: " .. tostring(err), vim.log.levels.ERROR)
+    end
+  end, opts)
+  vim.keymap.set("n", "h", function()
+    local ok, err = state.seek(-5)
+    if not ok then
+      vim.notify("Seek backward failed: " .. tostring(err), vim.log.levels.ERROR)
+    end
+  end, opts)
+
+  -- Disable scrolling keys
+  local noop = function() end
+  vim.keymap.set("n", "<C-d>", noop, opts)
+  vim.keymap.set("n", "<C-u>", noop, opts)
+  vim.keymap.set("n", "<C-f>", noop, opts)
+  vim.keymap.set("n", "<C-b>", noop, opts)
+  vim.keymap.set("n", "<C-e>", noop, opts)
+  vim.keymap.set("n", "<C-y>", noop, opts)
+  vim.keymap.set("n", "j", noop, opts)
+  vim.keymap.set("n", "k", noop, opts)
+  vim.keymap.set("n", "gg", noop, opts)
+  vim.keymap.set("n", "G", noop, opts)
+  vim.keymap.set("n", "<Down>", noop, opts)
+  vim.keymap.set("n", "<Up>", noop, opts)
+  vim.keymap.set("n", "<PageDown>", noop, opts)
+  vim.keymap.set("n", "<PageUp>", noop, opts)
+
+  -- Disable mouse scrolling
+  vim.keymap.set("n", "<ScrollWheelUp>", noop, opts)
+  vim.keymap.set("n", "<ScrollWheelDown>", noop, opts)
+  vim.keymap.set("n", "<ScrollWheelLeft>", noop, opts)
+  vim.keymap.set("n", "<ScrollWheelRight>", noop, opts)
+end
+
+function M.open(state_snapshot)
+  local opts = config.get().panel
+  if not opts.enabled then
+    return
+  end
+
+  local snapshot = state_snapshot or state.current
+
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(buf, "bufhidden", "hide")
+    vim.api.nvim_buf_set_option(buf, "filetype", "player_panel")
+  end
+
+  local width, height = resolve_dimensions(snapshot)
+  current_width = width
+  current_height = height
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+
+  win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = opts.border,
+  })
+
+  -- Disable scrolling in the window
+  vim.api.nvim_win_set_option(win, "scrolloff", 0)
+  vim.api.nvim_win_set_option(win, "cursorline", false)
+  vim.api.nvim_win_set_option(win, "scroll", 0)
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.api.nvim_buf_set_option(buf, "readonly", true)
+
+  ensure_keymaps()
+  render(snapshot)
+end
+
+function M.update(state_snapshot)
+  if not is_valid_window() then
+    return
+  end
+
+  local snapshot = state_snapshot or state.current
+  local panel_cfg = config.get().panel
+  if not panel_cfg.height then
+    local _, new_height = resolve_dimensions(snapshot)
+    if new_height ~= current_height then
+      vim.api.nvim_win_set_height(win, new_height)
+      current_height = new_height
+    end
+  end
+
+  render(snapshot)
+end
+
+function M.close()
+  -- Clean up image
+  if current_image then
+    pcall(function()
+      current_image:clear()
+    end)
+    current_image = nil
+  end
+  last_artwork_path = nil
+
+  if is_valid_window() then
+    vim.api.nvim_win_close(win, true)
+  end
+  win = nil
+  current_width = nil
+  current_height = nil
+end
+
+function M.toggle(state_snapshot)
+  if is_valid_window() then
+    M.close()
+  else
+    M.open(state_snapshot)
+  end
+end
+
+return M

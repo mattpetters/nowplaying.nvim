@@ -1,0 +1,37 @@
+# Lua
+*.luac
+
+# Neovim swap/backup
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Plugin managers
+/.cache/
+/.vim-cache/
+
+# Build artifacts
+/dist/
+
+# Node / editor
+node_modules/
+.DS_Store
+
+# Lua language server metadata
+.luarc.json
+
+# Neovim artifacts
+.local/
+
+# Generated helptags
+doc/tags
+
+# nvim log
+.nvimlog

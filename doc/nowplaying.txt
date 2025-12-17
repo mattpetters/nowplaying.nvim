@@ -1,0 +1,84 @@
+*nowplaying.txt*  NowPlaying.nvim plugin
+
+NowPlaying.nvim shows the current song playing in Apple Music or Spotify on macOS.
+
+Features~
+  - AppleScript-powered status for Apple Music and Spotify.
+  - Play/pause, next/prev, volume up/down, seek +/- commands.
+  - Floating panel with artwork, metadata, progress bar, and key hints.
+  - Optional artwork download (Spotify URLs cached via curl).
+  - Statusline helper: >lua require('player').statusline()
+
+Commands~
+  :PlayerPlayPause         Toggle playback
+  :PlayerNext              Next track
+  :PlayerPrev              Previous track
+  :PlayerVolUp             Volume up 5%
+  :PlayerVolDown           Volume down 5%
+  :PlayerSeekForward       Seek forward 5s
+  :PlayerSeekBackward      Seek backward 5s
+  :PlayerTogglePanel       Toggle panel
+  :PlayerNotify            Show current track via vim.notify
+  :PlayerRefresh           Refresh state
+
+Panel keys~
+  p play/pause   n next   b back   +/= vol up   - vol down
+  > seek +5s     < seek -5s        r refresh    q close
+
+Setup~
+>lua
+  require('player').setup({
+    player_priority = { 'apple_music', 'spotify' },
+    poll = { enabled = true, interval_ms = 5000 },
+  notify = {
+    enabled = false,
+    timeout = 2500,
+      elements = { track_title = true, artist = true, album = true, status_icon = true, player = true },
+    },
+    statusline = {
+      elements = { track_title = true, artist = true, album = true, status_icon = true, player = true },
+      separator = ' - ',
+      max_length = 50,
+    },
+    panel = {
+      enabled = true,
+      border = 'rounded',
+      width = nil, -- number for fixed width; nil uses fallback
+      height = nil, -- number for fixed height; nil auto-sizes to visible elements
+      elements = {
+        track_title = true,
+        artist = true,
+        album = true,
+        progress_bar = true,
+        volume = true,
+        controls = true,
+        artwork = {
+          enabled = false,
+          cache_dir = vim.fn.stdpath('cache') .. '/nowplaying.nvim',
+          download = false,
+          width = 28,
+          height = 14,
+        },
+      },
+    },
+    auto_switch = true,
+    log_level = 'warn',
+  })
+<lua
+
+Visibility~
+  - panel.elements controls track_title, artist, album, progress_bar, volume, controls (artwork settings live in panel.elements.artwork)
+  - notify.elements controls track_title, artist, album, status_icon, player
+  - statusline.elements controls track_title, artist, album, status_icon, player
+  - All visibility flags default to on; set to 0/false to hide specific parts
+
+Statusline~
+  Use require('player').statusline in your statusline/winbar component.
+
+Requirements~
+  - macOS, Apple Music or Spotify installed
+  - osascript (default on macOS)
+  - Optional: curl for artwork download; ImageMagick + image.nvim for real artwork rendering
+
+Author~
+  https://github.com/ferouk/nowplaying.nvim
