@@ -209,6 +209,31 @@ Default is all `true` except artwork in panel.
 local nowplaying = require("player").statusline
 ```
 
+### Lualine
+
+```lua
+local nowplaying = require("player").statusline
+
+require("lualine").setup({
+  sections = {
+    lualine_c = { nowplaying },
+  },
+})
+```
+
+### Heirline
+
+```lua
+local statusline = require("player").statusline
+
+require("heirline").setup({
+  statusline = {
+    statusline,
+    -- add other components here
+  },
+})
+```
+
 ## Artwork 🖼️
 
 Album artwork is rendered as real images in the panel using **image.nvim**. Spotify artwork can be downloaded and cached when `panel.elements.artwork.download = true`; Apple Music artwork is extracted to `cache_dir`.
