@@ -35,6 +35,23 @@ local defaults = {
       gap = "   ",
     },
   },
+  keymaps = {
+    enabled = false,
+    prefix = "<leader>np",
+    maps = {
+      toggle_panel = "",
+      play_pause = "p",
+      next_track = "n",
+      previous_track = "b",
+      stop = "x",
+      volume_up = "+",
+      volume_down = "-",
+      seek_forward = "l",
+      seek_backward = "h",
+      refresh = "r",
+      notify = "i",
+    },
+  },
   panel = {
     enabled = true,
     border = "rounded",

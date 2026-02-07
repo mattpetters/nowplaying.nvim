@@ -134,13 +134,25 @@ use({
 
 - `:NowPlayingPlayPause` toggle playback
 - `:NowPlayingNext` / `:NowPlayingPrev` next/previous track
+- `:NowPlayingStop` stop playback
 - `:NowPlayingVolUp` / `:NowPlayingVolDown` volume ±5%
 - `:NowPlayingSeekForward` / `:NowPlayingSeekBackward` seek ±5s
 - `:NowPlayingTogglePanel` open/close the panel
 - `:NowPlayingNotify` show current track via `vim.notify`
 - `:NowPlayingRefresh` refresh state and redraw UI
 
-Panel keymaps: `p` play/pause, `n` next, `b` previous, `+`/`=` volume up, `-` volume down, `l`/`>` seek forward, `h`/`<` seek backward, `r` refresh, `q` close.
+Panel keymaps: `p` play/pause, `n` next, `b` previous, `x` stop, `+`/`=` volume up, `-` volume down, `l`/`>` seek forward, `h`/`<` seek backward, `r` refresh, `q` close.
+
+Global keymaps (optional): set `keymaps.enabled = true` to register `<leader>np` bindings:
+- `<leader>np` toggle panel
+- `<leader>npp` play/pause
+- `<leader>npn` next track
+- `<leader>npb` previous track
+- `<leader>npx` stop
+- `<leader>np+` / `<leader>np-` volume up/down
+- `<leader>npl` / `<leader>nph` seek forward/backward
+- `<leader>npr` refresh
+- `<leader>npi` notify
 
 ## Configuration 🛠️
 
@@ -172,6 +184,29 @@ require("player").setup({
     },
     separator = " - ",
     max_length = 50, -- truncate to display width
+    marquee = {
+      enabled = true, -- scroll overflow text only
+      step_ms = 140, -- animation tick rate
+      pause_ms = 1400, -- pause at each edge
+      gap = "   ", -- spacing between looped text copies
+    },
+  },
+  keymaps = {
+    enabled = false, -- opt-in global mappings
+    prefix = "<leader>np",
+    maps = {
+      toggle_panel = "", -- <leader>np
+      play_pause = "p",
+      next_track = "n",
+      previous_track = "b",
+      stop = "x",
+      volume_up = "+",
+      volume_down = "-",
+      seek_forward = "l",
+      seek_backward = "h",
+      refresh = "r",
+      notify = "i",
+    },
   },
   panel = {
     enabled = true,

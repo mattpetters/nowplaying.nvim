@@ -51,6 +51,42 @@ local function create_cmd(name, fn, opts)
   vim.api.nvim_create_user_command(name, fn, opts or {})
 end
 
+local function setup_keymaps()
+  local key_cfg = config.get().keymaps or {}
+  if not key_cfg.enabled then
+    return
+  end
+
+  local prefix = key_cfg.prefix or "<leader>np"
+  local maps = key_cfg.maps or {}
+  local specs = {
+    { key = "toggle_panel", suffix = maps.toggle_panel, cmd = "NowPlayingTogglePanel", desc = "NowPlaying: toggle panel" },
+    { key = "play_pause", suffix = maps.play_pause, cmd = "NowPlayingPlayPause", desc = "NowPlaying: play/pause" },
+    { key = "next_track", suffix = maps.next_track, cmd = "NowPlayingNext", desc = "NowPlaying: next track" },
+    { key = "previous_track", suffix = maps.previous_track, cmd = "NowPlayingPrev", desc = "NowPlaying: previous track" },
+    { key = "stop", suffix = maps.stop, cmd = "NowPlayingStop", desc = "NowPlaying: stop" },
+    { key = "volume_up", suffix = maps.volume_up, cmd = "NowPlayingVolUp", desc = "NowPlaying: volume up" },
+    { key = "volume_down", suffix = maps.volume_down, cmd = "NowPlayingVolDown", desc = "NowPlaying: volume down" },
+    { key = "seek_forward", suffix = maps.seek_forward, cmd = "NowPlayingSeekForward", desc = "NowPlaying: seek forward" },
+    { key = "seek_backward", suffix = maps.seek_backward, cmd = "NowPlayingSeekBackward", desc = "NowPlaying: seek backward" },
+    { key = "refresh", suffix = maps.refresh, cmd = "NowPlayingRefresh", desc = "NowPlaying: refresh" },
+    { key = "notify", suffix = maps.notify, cmd = "NowPlayingNotify", desc = "NowPlaying: notify" },
+  }
+
+  local seen = {}
+  for _, spec in ipairs(specs) do
+    if spec.suffix ~= false and spec.suffix ~= nil then
+      local lhs = prefix .. spec.suffix
+      if seen[lhs] then
+        vim.notify(("NowPlaying keymap conflict: %s (%s, %s)"):format(lhs, seen[lhs], spec.key), vim.log.levels.WARN)
+      else
+        seen[lhs] = spec.key
+        vim.keymap.set("n", lhs, ("<cmd>%s<CR>"):format(spec.cmd), { silent = true, desc = spec.desc })
+      end
+    end
+  end
+end
+
 function M.setup()
   if registered then
     return
@@ -123,6 +159,8 @@ function M.setup()
       return state.seek(-5)
     end)
   end, { desc = "Seek backward 5 seconds" })
+
+  setup_keymaps()
 
   local cfg = config.get()
   if cfg.poll and cfg.poll.enabled then

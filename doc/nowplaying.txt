@@ -10,20 +10,42 @@ Features~
   - Statusline helper: >lua require('player').statusline()
 
 Commands~
-  :PlayerPlayPause         Toggle playback
-  :PlayerNext              Next track
-  :PlayerPrev              Previous track
-  :PlayerVolUp             Volume up 5%
-  :PlayerVolDown           Volume down 5%
-  :PlayerSeekForward       Seek forward 5s
-  :PlayerSeekBackward      Seek backward 5s
-  :PlayerTogglePanel       Toggle panel
-  :PlayerNotify            Show current track via vim.notify
-  :PlayerRefresh           Refresh state
+  :NowPlayingPlayPause     Toggle playback
+  :NowPlayingNext          Next track
+  :NowPlayingPrev          Previous track
+  :NowPlayingStop          Stop playback
+  :NowPlayingVolUp         Volume up 5%
+  :NowPlayingVolDown       Volume down 5%
+  :NowPlayingSeekForward   Seek forward 5s
+  :NowPlayingSeekBackward  Seek backward 5s
+  :NowPlayingTogglePanel   Toggle panel
+  :NowPlayingNotify        Show current track via vim.notify
+  :NowPlayingRefresh       Refresh state
 
 Panel keys~
-  p play/pause   n next   b back   +/= vol up   - vol down
+  p play/pause   n next   b back   x stop   +/= vol up   - vol down
   > seek +5s     < seek -5s        r refresh    q close
+
+Global keymaps (optional)~
+  Enable with:
+>lua
+  require('player').setup({
+    keymaps = { enabled = true },
+  })
+<lua
+
+  Default prefix: <leader>np
+  <leader>np    toggle panel
+  <leader>npp   play/pause
+  <leader>npn   next
+  <leader>npb   previous
+  <leader>npx   stop
+  <leader>np+   volume up
+  <leader>np-   volume down
+  <leader>npl   seek +5s
+  <leader>nph   seek -5s
+  <leader>npr   refresh
+  <leader>npi   notify
 
 Setup~
 >lua
@@ -39,6 +61,29 @@ Setup~
       elements = { track_title = true, artist = true, album = true, status_icon = true, player = true },
       separator = ' - ',
       max_length = 50,
+      marquee = {
+        enabled = true,
+        step_ms = 140,
+        pause_ms = 1400,
+        gap = '   ',
+      },
+    },
+    keymaps = {
+      enabled = false,
+      prefix = '<leader>np',
+      maps = {
+        toggle_panel = '',
+        play_pause = 'p',
+        next_track = 'n',
+        previous_track = 'b',
+        stop = 'x',
+        volume_up = '+',
+        volume_down = '-',
+        seek_forward = 'l',
+        seek_backward = 'h',
+        refresh = 'r',
+        notify = 'i',
+      },
     },
     panel = {
       enabled = true,
