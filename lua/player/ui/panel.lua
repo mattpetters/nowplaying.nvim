@@ -38,6 +38,11 @@ local function try_render_image(artwork_path)
     return nil -- File doesn't exist yet, fall back to ASCII
   end
 
+  -- Keep the existing image when artwork did not change to reduce flicker.
+  if current_image and last_artwork_path == artwork_path and win and vim.api.nvim_win_is_valid(win) then
+    return true
+  end
+
   -- Always clear the previous image before re-rendering to avoid duplicates
   if current_image then
     clear_current_image()
@@ -67,15 +72,15 @@ local function try_render_image(artwork_path)
     local artwork_cfg = (panel_cfg.elements or {}).artwork or {}
     local img_width = artwork_cfg.width or 20
     local img_height = artwork_cfg.height or 10
-    -- Center the image horizontally
-    local x_offset = math.max(0, math.floor((panel_width - img_width) / 2))
+    -- Miniplayer layout keeps artwork on the left.
+    local x_offset = 2
 
     local img = image_nvim.from_file(artwork_path, {
       window = win,
       buffer = buf,
       inline = true,
       x = x_offset,
-      y = 2,
+      y = 3,
       width = img_width,
       height = img_height,
     })
@@ -144,42 +149,25 @@ local function compute_content_height(state_snapshot)
     return 2
   end
 
-  local height = 0
-  height = height + 1 -- title line
-  height = height + 1 -- blank after title
-
-  if artwork_cfg.enabled then
-    height = height + (artwork_cfg.height or 10)
-  end
-
-  height = height + 1 -- blank line after artwork (always added)
-
+  local art_h = artwork_cfg.enabled and (artwork_cfg.height or 6) or 4
+  local meta_rows = 0
   if elements.track_title then
-    height = height + 1
+    meta_rows = meta_rows + 1
   end
   if elements.artist then
-    height = height + 1
+    meta_rows = meta_rows + 1
   end
   if elements.album then
-    height = height + 1
+    meta_rows = meta_rows + 1
   end
+  meta_rows = math.max(meta_rows, 2)
 
-  local playback_info = elements.progress_bar or elements.volume or elements.controls
-  if playback_info then
-    height = height + 1 -- blank before playback info
-  end
-
+  local height = 2 + math.max(art_h, meta_rows) -- header + spacer + content block
   if elements.progress_bar then
     height = height + 1
   end
-
-  if elements.volume then
-    height = height + 1
-  end
-
   if elements.controls then
-    height = height + 1 -- blank before controls block
-    height = height + 3 -- control lines
+    height = height + 1
   end
 
   return math.max(height, 3)
@@ -213,6 +201,18 @@ local function render(state_snapshot)
   local lines = {}
   local panel_cfg = config.get().panel
   local panel_width = (is_valid_window() and vim.api.nvim_win_get_width(win)) or current_width or panel_cfg.width or 60
+  local panel_elements = panel_cfg.elements or {}
+
+  local function pad_or_truncate(text, width)
+    local t = text or ""
+    if width <= 0 then
+      return ""
+    end
+    if #t > width then
+      return truncate_text(t, width)
+    end
+    return t .. string.rep(" ", width - #t)
+  end
 
   if not state_snapshot or state_snapshot.status == "inactive" then
     table.insert(lines, center_text("NowPlaying.nvim", panel_width))
@@ -225,73 +225,65 @@ local function render(state_snapshot)
       state_snapshot.player_label or require("player.utils").format_provider(state_snapshot.player),
       status_icon
     )
-    table.insert(lines, center_text(title_line, panel_width))
+    table.insert(lines, pad_or_truncate(" " .. title_line, panel_width))
     table.insert(lines, "")
 
-    -- Try to render real image if available and enabled
-    local cfg = (panel_cfg.elements or {}).artwork or {}
-    if cfg.enabled and state_snapshot.artwork and state_snapshot.artwork.path then
-      if try_render_image(state_snapshot.artwork.path) then
-        -- Reserve space for the image
-        for _ = 1, (cfg.height or 10) do
-          table.insert(lines, "")
-        end
+    local cfg = panel_elements.artwork or {}
+    local art_w = cfg.enabled and (cfg.width or 10) or 0
+    local art_h = cfg.enabled and (cfg.height or 6) or 4
+    local left_pad = 2
+    local gap = cfg.enabled and 2 or 0
+    local right_w = math.max(panel_width - left_pad - art_w - gap - 2, 18)
+
+    local meta_lines = {}
+    if panel_elements.track_title then
+      table.insert(meta_lines, truncate_text(track.title or "Unknown", right_w))
+    end
+    if panel_elements.artist then
+      table.insert(meta_lines, truncate_text(track.artist or "Unknown", right_w))
+    end
+    if panel_elements.album then
+      table.insert(meta_lines, truncate_text(track.album or "Unknown", right_w))
+    end
+    if #meta_lines == 0 then
+      table.insert(meta_lines, "No track metadata")
+    end
+
+    local block_h = math.max(art_h, #meta_lines)
+    local meta_start = math.max(1, math.floor((block_h - #meta_lines) / 2) + 1)
+
+    for row_idx = 1, block_h do
+      local right_text = ""
+      if row_idx >= meta_start and row_idx < meta_start + #meta_lines then
+        right_text = meta_lines[row_idx - meta_start + 1]
       end
+      local line = string.rep(" ", left_pad) .. string.rep(" ", art_w) .. string.rep(" ", gap) .. pad_or_truncate(right_text, right_w)
+      table.insert(lines, pad_or_truncate(line, panel_width))
+    end
+
+    if cfg.enabled and state_snapshot.artwork and state_snapshot.artwork.path then
+      try_render_image(state_snapshot.artwork.path)
     else
-      -- Artwork disabled or missing; clear any existing image
       clear_current_image()
       last_artwork_path = nil
     end
 
-    table.insert(lines, "")
-    -- Truncate and center text
-    local max_text_width = math.max(panel_width - 10, 20)  -- Leave room for labels and padding
-    local panel_elements = panel_cfg.elements or {}
-
-    if panel_elements.track_title then
-      local track_line = "Track : " .. truncate_text(track.title or "Unknown", max_text_width)
-      table.insert(lines, center_text(track_line, panel_width))
-    end
-
-    if panel_elements.artist then
-      local artist_line = "Artist: " .. truncate_text(track.artist or "Unknown", max_text_width)
-      table.insert(lines, center_text(artist_line, panel_width))
-    end
-
-    if panel_elements.album then
-      local album_line = "Album : " .. truncate_text(track.album or "Unknown", max_text_width)
-      table.insert(lines, center_text(album_line, panel_width))
-    end
-    local show_playback_info = panel_elements.progress_bar or panel_elements.volume or panel_elements.controls
-    if show_playback_info then
-      table.insert(lines, "")
-    end
-
     if panel_elements.progress_bar then
       local pos = format_time(state_snapshot.position)
-      local dur = format_time(track.duration)
-      -- Calculate progress bar width: panel_width - time display - brackets - padding
-      -- Format: "[████████████] 2:30 / 4:15"
-      local time_display = string.format("%s / %s", pos, dur)
-      local progress_bar_width = panel_width - #time_display - 4  -- 4 for "[] " + space
-      progress_bar_width = math.max(progress_bar_width, 20)  -- Minimum width
-      local progress_line = string.format("[%s] %s", progress_bar(state_snapshot.position, track.duration, progress_bar_width), time_display)
-      table.insert(lines, center_text(progress_line, panel_width))
-    end
-
-    if panel_elements.volume then
-      local volume_line = "Volume: " .. (state_snapshot.volume and tostring(math.floor(state_snapshot.volume)) .. "%" or "?")
-      table.insert(lines, center_text(volume_line, panel_width))
+      local duration = tonumber(track.duration) or 0
+      local elapsed = tonumber(state_snapshot.position) or 0
+      local remaining = duration > 0 and math.max(duration - elapsed, 0) or nil
+      local left_time = pos
+      local right_time = remaining and ("-" .. format_time(remaining)) or "-?:??"
+      local bar_w = math.max(panel_width - #left_time - #right_time - 8, 12)
+      local progress_line = string.format(" %s [%s] %s", left_time, progress_bar(state_snapshot.position, track.duration, bar_w), right_time)
+      table.insert(lines, pad_or_truncate(progress_line, panel_width))
     end
 
     if panel_elements.controls then
-      table.insert(lines, "")
-      local controls = "Controls: [p]play/pause [n]next [b]back"
-      table.insert(lines, center_text(controls, panel_width))
-      local controls2 = "[+/=]vol+ [-]vol- [l/>]seek+ [h/<]seek-"
-      table.insert(lines, center_text(controls2, panel_width))
-      local controls3 = "[r]refresh [q]close"
-      table.insert(lines, center_text(controls3, panel_width))
+      local play_icon = state_snapshot.status == "playing" and "⏸" or "▶"
+      local controls_line = string.format("  ⏮    %s    ⏹    ⏭", play_icon)
+      table.insert(lines, center_text(controls_line, panel_width))
     end
   end
 
