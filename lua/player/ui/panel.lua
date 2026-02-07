@@ -100,19 +100,35 @@ local function truncate_text(text, max_width)
   if not text then
     return ""
   end
-  if #text <= max_width then
+  local width = vim.fn.strdisplaywidth(text)
+  if width <= max_width then
     return text
   end
-  return text:sub(1, max_width - 3) .. "..."
+  if max_width <= 3 then
+    return string.rep(".", max_width)
+  end
+
+  local target = max_width - 3
+  local out = ""
+  local chars = vim.fn.strchars(text)
+  for i = 1, chars do
+    local ch = vim.fn.strcharpart(text, i - 1, 1)
+    if vim.fn.strdisplaywidth(out .. ch) > target then
+      break
+    end
+    out = out .. ch
+  end
+  return out .. "..."
 end
 
 local function center_text(text, width)
-  local text_len = #text
-  if text_len >= width then
+  local text_width = vim.fn.strdisplaywidth(text)
+  if text_width >= width then
     return text
   end
-  local padding = math.floor((width - text_len) / 2)
-  return string.rep(" ", padding) .. text
+  local padding_left = math.floor((width - text_width) / 2)
+  local padding_right = width - text_width - padding_left
+  return string.rep(" ", padding_left) .. text .. string.rep(" ", padding_right)
 end
 
 local function format_time(seconds)
@@ -203,19 +219,21 @@ local function render(state_snapshot)
     if width <= 0 then
       return ""
     end
-    if #t > width then
+    local t_width = vim.fn.strdisplaywidth(t)
+    if t_width > width then
       return truncate_text(t, width)
     end
-    return t .. string.rep(" ", width - #t)
+    return t .. string.rep(" ", width - t_width)
   end
 
   local function center_cell(text, width)
     local t = text or ""
-    if #t >= width then
+    local t_width = vim.fn.strdisplaywidth(t)
+    if t_width >= width then
       return t
     end
-    local left = math.floor((width - #t) / 2)
-    local right = width - #t - left
+    local left = math.floor((width - t_width) / 2)
+    local right = width - t_width - left
     return string.rep(" ", left) .. t .. string.rep(" ", right)
   end
 
@@ -422,6 +440,7 @@ function M.open(state_snapshot)
   vim.api.nvim_win_set_option(win, "scrolloff", 0)
   vim.api.nvim_win_set_option(win, "cursorline", false)
   vim.api.nvim_win_set_option(win, "scroll", 0)
+  vim.api.nvim_win_set_option(win, "winhl", "Normal:NormalFloat,FloatBorder:FloatBorder")
   vim.api.nvim_buf_set_option(buf, "modifiable", false)
   vim.api.nvim_buf_set_option(buf, "readonly", true)
 
