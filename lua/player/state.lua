@@ -179,6 +179,30 @@ function M.set_provider(name)
   return M.refresh({ provider = select_provider(name) })
 end
 
+function M.tick(delta_seconds)
+  if not M.current or M.current.status ~= "playing" then
+    return M.current
+  end
+
+  local track = M.current.track or {}
+  local duration = tonumber(track.duration)
+  local position = tonumber(M.current.position)
+  local delta = tonumber(delta_seconds) or 1
+
+  if not duration or duration <= 0 or not position then
+    return M.current
+  end
+
+  local next_pos = math.min(position + delta, duration)
+  if next_pos <= position then
+    return M.current
+  end
+
+  M.current.position = next_pos
+  emit(M.current)
+  return M.current
+end
+
 function M.providers()
   local names = {}
   for name in pairs(providers) do

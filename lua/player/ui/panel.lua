@@ -196,7 +196,7 @@ local function compute_content_height(state_snapshot)
 
   local height = 2 + math.max(art_h, meta_rows) -- header + spacer + content block
   if elements.progress_bar then
-    height = height + 3 -- two spacer rows + bar row
+    height = height + 2 -- one spacer row + bar row
   end
   if elements.controls then
     height = height + 2
@@ -314,7 +314,6 @@ local function render(state_snapshot)
     end
 
     if panel_elements.progress_bar then
-      table.insert(lines, string.rep(" ", panel_width))
       table.insert(lines, string.rep(" ", panel_width))
       local pos = format_time(state_snapshot.position)
       local duration = tonumber(track.duration) or 0

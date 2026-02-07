@@ -7,7 +7,7 @@ local M = {}
 
 local registered = false
 local poll_timer = nil
-local last_track_id = nil -- Track the last song to detect changes
+local ui_timer = nil
 
 local function notify_error(msg)
   vim.notify(msg, vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
@@ -19,7 +19,6 @@ local function wrap_action(fn)
     notify_error(err or "command failed")
     return
   end
-  notify_ui.show(state.current)
 end
 
 local function refresh_and_notify()
@@ -43,20 +42,6 @@ function M.setup()
 
   state.on_change(function(s)
     panel.update(s)
-
-    -- Notify on track change
-    if s and s.track and s.status ~= "inactive" then
-      local current_track_id = (s.track.title or "") .. "|" .. (s.track.artist or "") .. "|" .. (s.track.album or "")
-
-      if last_track_id and last_track_id ~= current_track_id then
-        -- Track changed, show notification
-        notify_ui.show(s)
-      end
-
-      last_track_id = current_track_id
-    elseif s and s.status == "inactive" then
-      last_track_id = nil
-    end
   end)
 
   create_cmd("NowPlayingPlayPause", function()
@@ -102,7 +87,6 @@ function M.setup()
       notify_error(err or "unable to refresh player state")
       return
     end
-    notify_ui.show(snapshot)
   end, { desc = "Refresh player state" })
 
   create_cmd("NowPlayingSeekForward", function()
@@ -128,6 +112,15 @@ function M.setup()
       state.refresh()
     end))
   end
+
+  if ui_timer then
+    ui_timer:stop()
+    ui_timer:close()
+  end
+  ui_timer = vim.loop.new_timer()
+  ui_timer:start(1000, 1000, vim.schedule_wrap(function()
+    state.tick(1)
+  end))
 end
 
 return M
