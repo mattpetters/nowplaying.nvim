@@ -7,6 +7,7 @@ local buf, win
 local current_width, current_height
 local current_image -- Track current image object for cleanup
 local last_artwork_path -- Track the last artwork path to avoid re-rendering
+local render_seq = 0 -- Monotonic token to discard stale deferred renders
 
 local function clear_current_image()
   if current_image then
@@ -38,6 +39,14 @@ local function try_render_image(artwork_path)
     return nil -- File doesn't exist yet, fall back to ASCII
   end
 
+  -- If artwork hasn't changed and image is still present, keep it to avoid flicker.
+  if current_image and last_artwork_path == artwork_path and win and vim.api.nvim_win_is_valid(win) then
+    return true
+  end
+
+  render_seq = render_seq + 1
+  local expected_seq = render_seq
+
   -- Always clear the previous image before re-rendering to avoid duplicates
   if current_image then
     clear_current_image()
@@ -48,6 +57,9 @@ local function try_render_image(artwork_path)
   -- Create new image with absolute geometry
   -- Need to defer until window position is stable
   vim.defer_fn(function()
+    if expected_seq ~= render_seq then
+      return
+    end
     if not buf or not vim.api.nvim_buf_is_valid(buf) then
       return
     end
@@ -57,6 +69,10 @@ local function try_render_image(artwork_path)
     -- Verify we're still showing the same artwork
     if last_artwork_path ~= artwork_path then
       return
+    end
+
+    if current_image then
+      clear_current_image()
     end
 
     -- Create and render new image with inline mode
@@ -91,7 +107,7 @@ local function try_render_image(artwork_path)
         end
       end)
     end
-  end, 150) -- Slightly longer delay for window stabilization
+  end, 90)
 
   return true
 end
@@ -175,7 +191,7 @@ local function compute_content_height(state_snapshot)
 
   local height = 2 + math.max(art_h, meta_rows) -- header + spacer + content block
   if elements.progress_bar then
-    height = height + 1
+    height = height + 2 -- one spacer + bar row
   end
   if elements.controls then
     height = height + 2
@@ -286,11 +302,13 @@ local function render(state_snapshot)
     if cfg.enabled and state_snapshot.artwork and state_snapshot.artwork.path then
       try_render_image(state_snapshot.artwork.path)
     else
+      render_seq = render_seq + 1
       clear_current_image()
       last_artwork_path = nil
     end
 
     if panel_elements.progress_bar then
+      table.insert(lines, string.rep(" ", panel_width))
       local pos = format_time(state_snapshot.position)
       local duration = tonumber(track.duration) or 0
       local elapsed = tonumber(state_snapshot.position) or 0
@@ -310,6 +328,13 @@ local function render(state_snapshot)
       table.insert(lines, center_text(icon_row, panel_width))
       table.insert(lines, center_text(key_row, panel_width))
     end
+  end
+
+  while #lines < current_height do
+    table.insert(lines, string.rep(" ", panel_width))
+  end
+  while #lines > current_height do
+    table.remove(lines)
   end
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -440,7 +465,7 @@ function M.open(state_snapshot)
   vim.api.nvim_win_set_option(win, "scrolloff", 0)
   vim.api.nvim_win_set_option(win, "cursorline", false)
   vim.api.nvim_win_set_option(win, "scroll", 0)
-  vim.api.nvim_win_set_option(win, "winhl", "Normal:NormalFloat,FloatBorder:FloatBorder")
+  vim.api.nvim_win_set_option(win, "winhl", "Normal:Normal,FloatBorder:FloatBorder")
   vim.api.nvim_buf_set_option(buf, "modifiable", false)
   vim.api.nvim_buf_set_option(buf, "readonly", true)
 
@@ -474,6 +499,7 @@ function M.close()
     end)
     current_image = nil
   end
+  render_seq = render_seq + 1
   last_artwork_path = nil
 
   if is_valid_window() then
