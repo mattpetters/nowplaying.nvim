@@ -1,6 +1,7 @@
 local config = require("player.config")
 local notify_ui = require("player.ui.notify")
 local panel = require("player.ui.panel")
+local statusline = require("player.ui.statusline")
 local state = require("player.state")
 
 local M = {}
@@ -8,6 +9,22 @@ local M = {}
 local registered = false
 local poll_timer = nil
 local ui_timer = nil
+local marquee_timer = nil
+local last_track_key = nil
+
+local function track_key(snapshot)
+  if not snapshot or snapshot.status == "inactive" then
+    return "inactive"
+  end
+  local track = snapshot.track or {}
+  return table.concat({
+    snapshot.player or "",
+    track.title or "",
+    track.artist or "",
+    track.album or "",
+    tostring(track.duration or ""),
+  }, "\031")
+end
 
 local function notify_error(msg)
   vim.notify(msg, vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
@@ -42,6 +59,12 @@ function M.setup()
 
   state.on_change(function(s)
     panel.update(s)
+    local key = track_key(s)
+    if key ~= last_track_key then
+      last_track_key = key
+      statusline.reset()
+    end
+    vim.cmd("redrawstatus")
   end)
 
   create_cmd("NowPlayingPlayPause", function()
@@ -121,6 +144,23 @@ function M.setup()
   ui_timer:start(1000, 1000, vim.schedule_wrap(function()
     state.tick(1)
   end))
+
+  if marquee_timer then
+    marquee_timer:stop()
+    marquee_timer:close()
+  end
+  local marquee_cfg = (cfg.statusline and cfg.statusline.marquee) or {}
+  if marquee_cfg.enabled then
+    local step_ms = tonumber(marquee_cfg.step_ms) or 140
+    if step_ms > 0 then
+      marquee_timer = vim.loop.new_timer()
+      marquee_timer:start(step_ms, step_ms, vim.schedule_wrap(function()
+        if statusline.tick() then
+          vim.cmd("redrawstatus")
+        end
+      end))
+    end
+  end
 end
 
 return M

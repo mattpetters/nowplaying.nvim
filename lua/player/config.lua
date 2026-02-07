@@ -28,6 +28,12 @@ local defaults = {
     },
     separator = " - ",
     max_length = 50,
+    marquee = {
+      enabled = true,
+      step_ms = 140,
+      pause_ms = 1400,
+      gap = "   ",
+    },
   },
   panel = {
     enabled = true,
