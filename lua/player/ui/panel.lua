@@ -75,7 +75,7 @@ local function try_render_image(artwork_path)
       buffer = buf,
       inline = true,
       x = x_offset,
-      y = 3,
+      y = 2,
       width = img_width,
       height = img_height,
     })
@@ -132,7 +132,7 @@ local function progress_bar(position, duration, width)
   end
   local ratio = math.min(math.max(position / duration, 0), 1)
   local filled = math.max(0, math.floor(width * ratio))
-  return string.rep("=", filled) .. string.rep("-", width - filled)
+  return string.rep("█", filled) .. string.rep("░", width - filled)
 end
 
 local function compute_content_height(state_snapshot)
@@ -209,6 +209,16 @@ local function render(state_snapshot)
     return t .. string.rep(" ", width - #t)
   end
 
+  local function center_cell(text, width)
+    local t = text or ""
+    if #t >= width then
+      return t
+    end
+    local left = math.floor((width - #t) / 2)
+    local right = width - #t - left
+    return string.rep(" ", left) .. t .. string.rep(" ", right)
+  end
+
   if not state_snapshot or state_snapshot.status == "inactive" then
     table.insert(lines, center_text("NowPlaying.nvim", panel_width))
     table.insert(lines, center_text("No active player", panel_width))
@@ -220,8 +230,7 @@ local function render(state_snapshot)
       state_snapshot.player_label or require("player.utils").format_provider(state_snapshot.player),
       status_icon
     )
-    table.insert(lines, pad_or_truncate(" " .. title_line, panel_width))
-    table.insert(lines, "")
+    table.insert(lines, center_text(title_line, panel_width))
 
     local cfg = panel_elements.artwork or {}
     local art_w = cfg.enabled and (cfg.width or 10) or 0
@@ -272,15 +281,16 @@ local function render(state_snapshot)
       local right_time = remaining and ("-" .. format_time(remaining)) or "-?:??"
       local bar_w = math.max(panel_width - #left_time - #right_time - 6, 10)
       local progress_line = string.format("%s [%s] %s", left_time, progress_bar(state_snapshot.position, track.duration, bar_w), right_time)
-      table.insert(lines, pad_or_truncate(progress_line, panel_width))
+      table.insert(lines, center_text(progress_line, panel_width))
     end
 
     if panel_elements.controls then
       local play_icon = state_snapshot.status == "playing" and "⏸" or "▶"
-      local controls_icons = string.format("[b]⏮  [p]%s  [x]⏹  [n]⏭", play_icon)
-      local controls_seek = "[h/<]-5s  [l/>]+5s  [q]close"
-      table.insert(lines, center_text(controls_icons, panel_width))
-      table.insert(lines, center_text(controls_seek, panel_width))
+      local cell_w = 8
+      local icon_row = center_cell("⏮", cell_w) .. center_cell(play_icon, cell_w) .. center_cell("⏹", cell_w) .. center_cell("⏭", cell_w)
+      local key_row = center_cell("[b]", cell_w) .. center_cell("[p]", cell_w) .. center_cell("[x]", cell_w) .. center_cell("[n]", cell_w)
+      table.insert(lines, center_text(icon_row, panel_width))
+      table.insert(lines, center_text(key_row, panel_width))
     end
   end
 
