@@ -120,6 +120,21 @@ function M.previous_track()
   return ok, p_err
 end
 
+function M.stop()
+  local provider, err = with_provider()
+  if not provider then
+    return false, err
+  end
+  if type(provider.stop) ~= "function" then
+    return false, "stop not supported"
+  end
+  local ok, p_err = provider.stop()
+  if ok then
+    M.refresh({ provider = provider })
+  end
+  return ok, p_err
+end
+
 function M.seek(delta)
   local provider, err = with_provider()
   if not provider then

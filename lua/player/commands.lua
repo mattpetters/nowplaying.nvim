@@ -71,6 +71,10 @@ function M.setup()
     wrap_action(state.previous_track)
   end, { desc = "Go to previous track" })
 
+  create_cmd("NowPlayingStop", function()
+    wrap_action(state.stop)
+  end, { desc = "Stop playback" })
+
   create_cmd("NowPlayingVolUp", function()
     wrap_action(state.volume_up)
   end, { desc = "Increase volume by 5%" })

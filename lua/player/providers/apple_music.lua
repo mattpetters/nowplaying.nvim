@@ -101,6 +101,19 @@ function M.previous_track()
   return ok, stderr
 end
 
+function M.stop()
+  local script = [[
+tell application "Music"
+  pause
+  try
+    set player position to 0
+  end try
+end tell
+  ]]
+  local ok, _, stderr = utils.run_osascript(script)
+  return ok, stderr
+end
+
 local function volume_script(delta)
   return string.format([[
 tell application "Music"

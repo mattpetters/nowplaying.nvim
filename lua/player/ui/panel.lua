@@ -38,11 +38,6 @@ local function try_render_image(artwork_path)
     return nil -- File doesn't exist yet, fall back to ASCII
   end
 
-  -- Keep the existing image when artwork did not change to reduce flicker.
-  if current_image and last_artwork_path == artwork_path and win and vim.api.nvim_win_is_valid(win) then
-    return true
-  end
-
   -- Always clear the previous image before re-rendering to avoid duplicates
   if current_image then
     clear_current_image()
@@ -137,7 +132,7 @@ local function progress_bar(position, duration, width)
   end
   local ratio = math.min(math.max(position / duration, 0), 1)
   local filled = math.max(0, math.floor(width * ratio))
-  return string.rep("█", filled) .. string.rep("░", width - filled)
+  return string.rep("=", filled) .. string.rep("-", width - filled)
 end
 
 local function compute_content_height(state_snapshot)
@@ -167,7 +162,7 @@ local function compute_content_height(state_snapshot)
     height = height + 1
   end
   if elements.controls then
-    height = height + 1
+    height = height + 2
   end
 
   return math.max(height, 3)
@@ -275,15 +270,17 @@ local function render(state_snapshot)
       local remaining = duration > 0 and math.max(duration - elapsed, 0) or nil
       local left_time = pos
       local right_time = remaining and ("-" .. format_time(remaining)) or "-?:??"
-      local bar_w = math.max(panel_width - #left_time - #right_time - 8, 12)
-      local progress_line = string.format(" %s [%s] %s", left_time, progress_bar(state_snapshot.position, track.duration, bar_w), right_time)
+      local bar_w = math.max(panel_width - #left_time - #right_time - 6, 10)
+      local progress_line = string.format("%s [%s] %s", left_time, progress_bar(state_snapshot.position, track.duration, bar_w), right_time)
       table.insert(lines, pad_or_truncate(progress_line, panel_width))
     end
 
     if panel_elements.controls then
       local play_icon = state_snapshot.status == "playing" and "⏸" or "▶"
-      local controls_line = string.format("  ⏮    %s    ⏹    ⏭", play_icon)
-      table.insert(lines, center_text(controls_line, panel_width))
+      local controls_icons = string.format("[b]⏮  [p]%s  [x]⏹  [n]⏭", play_icon)
+      local controls_seek = "[h/<]-5s  [l/>]+5s  [q]close"
+      table.insert(lines, center_text(controls_icons, panel_width))
+      table.insert(lines, center_text(controls_seek, panel_width))
     end
   end
 
@@ -316,6 +313,9 @@ local function ensure_keymaps()
   end, opts)
   vim.keymap.set("n", "b", function()
     state.previous_track()
+  end, opts)
+  vim.keymap.set("n", "x", function()
+    state.stop()
   end, opts)
   vim.keymap.set("n", "+", function()
     state.volume_up()
