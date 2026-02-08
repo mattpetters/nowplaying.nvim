@@ -143,7 +143,7 @@ use({
 
 Panel keymaps: `p` play/pause, `n` next, `b` previous, `x` stop, `+`/`=` volume up, `-` volume down, `l`/`>` seek forward, `h`/`<` seek backward, `r` refresh, `q` close.
 
-Global keymaps (optional): set `keymaps.enabled = true` to register `<leader>np` bindings:
+Global keymaps: default `<leader>np` bindings:
 - `<leader>np` toggle panel
 - `<leader>npp` play/pause
 - `<leader>npn` next track
@@ -192,7 +192,7 @@ require("player").setup({
     },
   },
   keymaps = {
-    enabled = false, -- opt-in global mappings
+    enabled = true, -- default: on
     prefix = "<leader>np",
     maps = {
       toggle_panel = "", -- <leader>np

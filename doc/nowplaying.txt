@@ -26,14 +26,7 @@ Panel keys~
   p play/pause   n next   b back   x stop   +/= vol up   - vol down
   > seek +5s     < seek -5s        r refresh    q close
 
-Global keymaps (optional)~
-  Enable with:
->lua
-  require('player').setup({
-    keymaps = { enabled = true },
-  })
-<lua
-
+Global keymaps~
   Default prefix: <leader>np
   <leader>np    toggle panel
   <leader>npp   play/pause
@@ -69,7 +62,7 @@ Setup~
       },
     },
     keymaps = {
-      enabled = false,
+      enabled = true,
       prefix = '<leader>np',
       maps = {
         toggle_panel = '',

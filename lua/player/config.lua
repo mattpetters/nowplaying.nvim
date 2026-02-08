@@ -36,7 +36,7 @@ local defaults = {
     },
   },
   keymaps = {
-    enabled = false,
+    enabled = true,
     prefix = "<leader>np",
     maps = {
       toggle_panel = "",
