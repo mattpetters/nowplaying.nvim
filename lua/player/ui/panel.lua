@@ -1,10 +1,13 @@
 local config = require("player.config")
 local state = require("player.state")
+local panel_utils = require("player.ui.panel_utils")
 
 local M = {}
 
 local buf, win
 local current_width, current_height
+local drag_start_mouse = nil -- { row, col } of mouse when drag began
+local drag_start_win = nil -- { row, col } of window when drag began
 local current_image -- Track current image object for cleanup
 local last_artwork_path -- Track the last artwork path to avoid re-rendering
 local last_image_key -- Track render geometry to avoid stale image placement
@@ -117,60 +120,11 @@ local function try_render_image(artwork_path)
   return true
 end
 
-local function truncate_text(text, max_width)
-  if not text then
-    return ""
-  end
-  local width = vim.fn.strdisplaywidth(text)
-  if width <= max_width then
-    return text
-  end
-  if max_width <= 3 then
-    return string.rep(".", max_width)
-  end
-
-  local target = max_width - 3
-  local out = ""
-  local chars = vim.fn.strchars(text)
-  for i = 1, chars do
-    local ch = vim.fn.strcharpart(text, i - 1, 1)
-    if vim.fn.strdisplaywidth(out .. ch) > target then
-      break
-    end
-    out = out .. ch
-  end
-  return out .. "..."
-end
-
-local function center_text(text, width)
-  local text_width = vim.fn.strdisplaywidth(text)
-  if text_width >= width then
-    return text
-  end
-  local padding_left = math.floor((width - text_width) / 2)
-  local padding_right = width - text_width - padding_left
-  return string.rep(" ", padding_left) .. text .. string.rep(" ", padding_right)
-end
-
-local function format_time(seconds)
-  if not seconds then
-    return "?:??"
-  end
-  local s = math.floor(tonumber(seconds) or 0)
-  local m = math.floor(s / 60)
-  local rem = s % 60
-  return string.format("%d:%02d", m, rem)
-end
-
-local function progress_bar(position, duration, width)
-  width = width or 28
-  if not position or not duration or duration == 0 then
-    return string.rep("░", width)
-  end
-  local ratio = math.min(math.max(position / duration, 0), 1)
-  local filled = math.max(0, math.floor(width * ratio))
-  return string.rep("█", filled) .. string.rep("░", width - filled)
-end
+-- Pure text helpers extracted to panel_utils for testability.
+local truncate_text = panel_utils.truncate_text
+local center_text = panel_utils.center_text
+local format_time = panel_utils.format_time
+local progress_bar = panel_utils.progress_bar
 
 local function compute_content_height(state_snapshot)
   local panel_cfg = config.get().panel
@@ -227,8 +181,8 @@ local function render(state_snapshot)
   end
 
   -- Temporarily make buffer modifiable for updates
-  vim.api.nvim_buf_set_option(buf, "modifiable", true)
-  vim.api.nvim_buf_set_option(buf, "readonly", false)
+  vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+  vim.api.nvim_set_option_value("readonly", false, { buf = buf })
 
   local lines = {}
   local panel_cfg = config.get().panel
@@ -351,8 +305,8 @@ local function render(state_snapshot)
   end
 
   -- Make buffer readonly again to prevent scrolling and editing
-  vim.api.nvim_buf_set_option(buf, "modifiable", false)
-  vim.api.nvim_buf_set_option(buf, "readonly", true)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+  vim.api.nvim_set_option_value("readonly", true, { buf = buf })
 end
 
 local function ensure_keymaps()
@@ -415,26 +369,96 @@ local function ensure_keymaps()
 
   -- Disable scrolling keys
   local noop = function() end
-  vim.keymap.set("n", "<C-d>", noop, opts)
-  vim.keymap.set("n", "<C-u>", noop, opts)
-  vim.keymap.set("n", "<C-f>", noop, opts)
-  vim.keymap.set("n", "<C-b>", noop, opts)
-  vim.keymap.set("n", "<C-e>", noop, opts)
-  vim.keymap.set("n", "<C-y>", noop, opts)
+  local all_modes = { "n", "v", "x", "s", "i" }
+  for _, mode in ipairs(all_modes) do
+    vim.keymap.set(mode, "<C-d>", noop, opts)
+    vim.keymap.set(mode, "<C-u>", noop, opts)
+    vim.keymap.set(mode, "<C-f>", noop, opts)
+    vim.keymap.set(mode, "<C-b>", noop, opts)
+    vim.keymap.set(mode, "<C-e>", noop, opts)
+    vim.keymap.set(mode, "<C-y>", noop, opts)
+    vim.keymap.set(mode, "<Down>", noop, opts)
+    vim.keymap.set(mode, "<Up>", noop, opts)
+    vim.keymap.set(mode, "<PageDown>", noop, opts)
+    vim.keymap.set(mode, "<PageUp>", noop, opts)
+    vim.keymap.set(mode, "<ScrollWheelUp>", noop, opts)
+    vim.keymap.set(mode, "<ScrollWheelDown>", noop, opts)
+    vim.keymap.set(mode, "<ScrollWheelLeft>", noop, opts)
+    vim.keymap.set(mode, "<ScrollWheelRight>", noop, opts)
+  end
   vim.keymap.set("n", "j", noop, opts)
   vim.keymap.set("n", "k", noop, opts)
   vim.keymap.set("n", "gg", noop, opts)
   vim.keymap.set("n", "G", noop, opts)
-  vim.keymap.set("n", "<Down>", noop, opts)
-  vim.keymap.set("n", "<Up>", noop, opts)
-  vim.keymap.set("n", "<PageDown>", noop, opts)
-  vim.keymap.set("n", "<PageUp>", noop, opts)
 
-  -- Disable mouse scrolling
-  vim.keymap.set("n", "<ScrollWheelUp>", noop, opts)
-  vim.keymap.set("n", "<ScrollWheelDown>", noop, opts)
-  vim.keymap.set("n", "<ScrollWheelLeft>", noop, opts)
-  vim.keymap.set("n", "<ScrollWheelRight>", noop, opts)
+  -- Mouse interaction: prevent cursor movement, text selection, and scrolling.
+  -- All mouse events lock the cursor to {1,0} so the buffer never scrolls.
+  local lock_cursor = function()
+    if is_valid_window() then
+      -- Escape visual/select mode if active, then pin cursor
+      local mode = vim.fn.mode()
+      if mode:match("[vVsS\022\019]") then
+        vim.cmd("normal! \027")
+      end
+      vim.api.nvim_win_set_cursor(win, { 1, 0 })
+    end
+  end
+
+  -- Block left-click from repositioning cursor in all modes
+  for _, mode in ipairs({ "n", "v", "x", "s" }) do
+    vim.keymap.set(mode, "<LeftMouse>", lock_cursor, opts)
+  end
+
+  -- Mouse drag-to-move (when draggable) or noop (when not)
+  local panel_cfg = config.get().panel
+  local function handle_drag()
+    if not is_valid_window() then
+      return
+    end
+    if not panel_cfg.draggable then
+      lock_cursor()
+      return
+    end
+    local mouse = vim.fn.getmousepos()
+    if not drag_start_mouse then
+      -- First drag event: capture starting positions
+      local win_cfg = vim.api.nvim_win_get_config(win)
+      drag_start_mouse = { row = mouse.screenrow, col = mouse.screencol }
+      drag_start_win = { row = win_cfg.row, col = win_cfg.col }
+      return
+    end
+    local dy = mouse.screenrow - drag_start_mouse.row
+    local dx = mouse.screencol - drag_start_mouse.col
+    local new_row = math.max(0, drag_start_win.row + dy)
+    local new_col = math.max(0, drag_start_win.col + dx)
+    vim.api.nvim_win_set_config(win, {
+      relative = "editor",
+      row = new_row,
+      col = new_col,
+    })
+    -- Re-render image after move so artwork tracks the window
+    if current_image then
+      render_seq = render_seq + 1
+      clear_current_image()
+      last_image_key = nil
+      local snapshot = state.current
+      if snapshot and snapshot.artwork and snapshot.artwork.path then
+        try_render_image(snapshot.artwork.path)
+      end
+    end
+  end
+
+  local function handle_release()
+    drag_start_mouse = nil
+    drag_start_win = nil
+    lock_cursor()
+  end
+
+  -- Map drag/release in all interactive modes so visual selection never starts
+  for _, mode in ipairs({ "n", "v", "x", "s" }) do
+    vim.keymap.set(mode, "<LeftDrag>", handle_drag, opts)
+    vim.keymap.set(mode, "<LeftRelease>", handle_release, opts)
+  end
 end
 
 function M.open(state_snapshot)
@@ -447,8 +471,8 @@ function M.open(state_snapshot)
 
   if not buf or not vim.api.nvim_buf_is_valid(buf) then
     buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_option(buf, "bufhidden", "hide")
-    vim.api.nvim_buf_set_option(buf, "filetype", "player_panel")
+    vim.api.nvim_set_option_value("bufhidden", "hide", { buf = buf })
+    vim.api.nvim_set_option_value("filetype", "player_panel", { buf = buf })
   end
 
   local width, height = resolve_dimensions(snapshot)
@@ -465,28 +489,73 @@ function M.open(state_snapshot)
     col = col,
     style = "minimal",
     border = opts.border,
+    mouse = true,
   })
 
-  -- Disable scrolling in the window
-  vim.api.nvim_win_set_option(win, "scrolloff", 0)
-  vim.api.nvim_win_set_option(win, "cursorline", false)
-  vim.api.nvim_win_set_option(win, "scroll", 0)
-  vim.api.nvim_win_set_option(win, "number", false)
-  vim.api.nvim_win_set_option(win, "relativenumber", false)
-  vim.api.nvim_win_set_option(win, "signcolumn", "no")
-  vim.api.nvim_win_set_option(win, "foldcolumn", "0")
-  vim.api.nvim_win_set_option(win, "statuscolumn", "")
-  vim.api.nvim_win_set_option(win, "colorcolumn", "")
-  vim.api.nvim_win_set_option(win, "winbar", "")
-  vim.api.nvim_win_set_option(win, "list", false)
-  vim.api.nvim_win_set_option(win, "wrap", false)
-  vim.api.nvim_win_set_option(win, "spell", false)
-  vim.api.nvim_win_set_option(win, "winhl", "Normal:Normal,FloatBorder:FloatBorder")
-  vim.api.nvim_win_set_option(win, "winblend", 0)
-  vim.api.nvim_buf_set_option(buf, "modifiable", false)
-  vim.api.nvim_buf_set_option(buf, "readonly", true)
+  -- Options not already covered by style="minimal"
+  local wo = function(name, value)
+    vim.api.nvim_set_option_value(name, value, { win = win })
+  end
+  wo("scrolloff", 0)
+  wo("sidescrolloff", 0)
+  wo("wrap", false)
+  wo("winbar", "")
+  wo("winhighlight", "Normal:Normal,FloatBorder:FloatBorder")
+  wo("winblend", 0)
+
+  local bo = function(name, value)
+    vim.api.nvim_set_option_value(name, value, { buf = buf })
+  end
+  bo("modifiable", false)
+  bo("readonly", true)
 
   ensure_keymaps()
+
+  -- Prevent the buffer from ever scrolling by pinning cursor to {1,0}.
+  -- CursorMoved fires *before* the screen redraws, so this stops scroll
+  -- at the source rather than reactively snapping back after the fact.
+  -- This also prevents album art (rendered at absolute window position)
+  -- from escaping the panel bounds when the text layer shifts.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = buf,
+    callback = function()
+      if not is_valid_window() then
+        return true -- remove autocmd when window is gone
+      end
+      local cursor = vim.api.nvim_win_get_cursor(win)
+      if cursor[1] ~= 1 or cursor[2] ~= 0 then
+        vim.api.nvim_win_set_cursor(win, { 1, 0 })
+      end
+    end,
+  })
+
+  -- Belt-and-suspenders: if something still manages to scroll the view
+  -- (e.g. external command, WinResized side-effect), snap topline back.
+  vim.api.nvim_create_autocmd("WinScrolled", {
+    buffer = buf,
+    callback = function()
+      if not is_valid_window() then
+        return true
+      end
+      local info = vim.fn.getwininfo(win)
+      if info and info[1] and info[1].topline ~= 1 then
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = 1, lnum = 1, col = 0 })
+        end)
+        -- Force artwork re-render since position was stale
+        if current_image then
+          render_seq = render_seq + 1
+          clear_current_image()
+          last_image_key = nil
+          local s = state.current
+          if s and s.artwork and s.artwork.path then
+            try_render_image(s.artwork.path)
+          end
+        end
+      end
+    end,
+  })
+
   render(snapshot)
 end
 
@@ -509,13 +578,7 @@ function M.update(state_snapshot)
 end
 
 function M.close()
-  -- Clean up image
-  if current_image then
-    pcall(function()
-      current_image:clear()
-    end)
-    current_image = nil
-  end
+  clear_current_image()
   render_seq = render_seq + 1
   last_artwork_path = nil
   last_image_key = nil

@@ -55,6 +55,7 @@ local defaults = {
   panel = {
     enabled = true,
     border = "rounded",
+    draggable = true, -- click and drag to move the panel
     width = nil, -- fixed width if set; otherwise fallback width
     height = nil, -- fixed height if set; otherwise auto-size
     elements = {

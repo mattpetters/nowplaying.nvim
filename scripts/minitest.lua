@@ -1,0 +1,44 @@
+-- scripts/minitest.lua
+-- Headless test runner for mini.test.
+-- Usage: nvim --headless -u scripts/minitest.lua
+
+-- Resolve project root (one level up from scripts/)
+local project_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+local deps_dir = project_root .. "/deps"
+
+-- Bootstrap mini.nvim if not present
+local mini_path = deps_dir .. "/mini.nvim"
+if not vim.loop.fs_stat(mini_path) then
+  vim.fn.system({
+    "git",
+    "clone",
+    "--filter=blob:none",
+    "https://github.com/echasnovski/mini.nvim",
+    mini_path,
+  })
+end
+
+-- Add deps and project to runtimepath
+vim.opt.rtp:prepend(mini_path)
+vim.opt.rtp:prepend(project_root)
+
+-- Disable swap/backup/undo for clean test runs
+vim.o.swapfile = false
+vim.o.backup = false
+vim.o.writebackup = false
+vim.o.undofile = false
+
+-- Set up mini.test with stdout reporter for CI / headless use
+require("mini.test").setup({
+  collect = {
+    find_files = function()
+      return vim.fn.globpath(project_root .. "/tests", "**/test_*.lua", true, true)
+    end,
+  },
+  execute = {
+    reporter = require("mini.test").gen_reporter.stdout({ quit_on_finish = true }),
+  },
+})
+
+-- Run all tests
+MiniTest.run()
