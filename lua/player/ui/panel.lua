@@ -392,72 +392,38 @@ local function ensure_keymaps()
   vim.keymap.set("n", "G", noop, opts)
 
   -- Mouse interaction: prevent cursor movement, text selection, and scrolling.
-  -- All mouse events lock the cursor to {1,0} so the buffer never scrolls.
-  local lock_cursor = function()
-    if is_valid_window() then
-      -- Escape visual/select mode if active, then pin cursor
-      local mode = vim.fn.mode()
-      if mode:match("[vVsS\022\019]") then
-        vim.cmd("normal! \027")
-      end
-      vim.api.nvim_win_set_cursor(win, { 1, 0 })
-    end
-  end
+  --
+  -- IMPORTANT: Mouse keys (<LeftMouse>, <LeftDrag>, <LeftRelease>) embed
+  -- position data.  Neovim's built-in handling processes cursor repositioning
+  -- *before* a Lua-callback mapping fires, so mapping to a function alone
+  -- cannot prevent the cursor from jumping.
+  --
+  -- The solution: map these keys to <Nop> (string mapping, NOT a Lua function)
+  -- which tells Neovim to completely discard the event including its built-in
+  -- side effects.  For drag-to-move we use <Cmd> mappings which execute
+  -- without mode changes and without triggering built-in mouse behaviour.
 
-  -- Block left-click from repositioning cursor in all modes
-  for _, mode in ipairs({ "n", "v", "x", "s" }) do
-    vim.keymap.set(mode, "<LeftMouse>", lock_cursor, opts)
-  end
-
-  -- Mouse drag-to-move (when draggable) or noop (when not)
   local panel_cfg = config.get().panel
-  local function handle_drag()
-    if not is_valid_window() then
-      return
-    end
-    if not panel_cfg.draggable then
-      lock_cursor()
-      return
-    end
-    local mouse = vim.fn.getmousepos()
-    if not drag_start_mouse then
-      -- First drag event: capture starting positions
-      local win_cfg = vim.api.nvim_win_get_config(win)
-      drag_start_mouse = { row = mouse.screenrow, col = mouse.screencol }
-      drag_start_win = { row = win_cfg.row, col = win_cfg.col }
-      return
-    end
-    local dy = mouse.screenrow - drag_start_mouse.row
-    local dx = mouse.screencol - drag_start_mouse.col
-    local new_row = math.max(0, drag_start_win.row + dy)
-    local new_col = math.max(0, drag_start_win.col + dx)
-    vim.api.nvim_win_set_config(win, {
-      relative = "editor",
-      row = new_row,
-      col = new_col,
-    })
-    -- Re-render image after move so artwork tracks the window
-    if current_image then
-      render_seq = render_seq + 1
-      clear_current_image()
-      last_image_key = nil
-      local snapshot = state.current
-      if snapshot and snapshot.artwork and snapshot.artwork.path then
-        try_render_image(snapshot.artwork.path)
-      end
-    end
-  end
+  local draggable = panel_cfg.draggable
 
-  local function handle_release()
-    drag_start_mouse = nil
-    drag_start_win = nil
-    lock_cursor()
-  end
+  -- Block all mouse clicks, drags, and releases from doing anything by default.
+  -- <Nop> as a string RHS prevents the built-in cursor-move/selection behaviour.
+  for _, mode in ipairs({ "n", "v", "x", "s", "i" }) do
+    vim.keymap.set(mode, "<LeftMouse>", "<Nop>", opts)
+    vim.keymap.set(mode, "<2-LeftMouse>", "<Nop>", opts)
+    vim.keymap.set(mode, "<3-LeftMouse>", "<Nop>", opts)
+    vim.keymap.set(mode, "<4-LeftMouse>", "<Nop>", opts)
+    vim.keymap.set(mode, "<RightMouse>", "<Nop>", opts)
+    vim.keymap.set(mode, "<MiddleMouse>", "<Nop>", opts)
 
-  -- Map drag/release in all interactive modes so visual selection never starts
-  for _, mode in ipairs({ "n", "v", "x", "s" }) do
-    vim.keymap.set(mode, "<LeftDrag>", handle_drag, opts)
-    vim.keymap.set(mode, "<LeftRelease>", handle_release, opts)
+    if draggable then
+      -- Use <Cmd> to run drag logic without triggering built-in mouse behaviour
+      vim.keymap.set(mode, "<LeftDrag>", "<Cmd>lua require('player.ui.panel')._handle_drag()<CR>", opts)
+      vim.keymap.set(mode, "<LeftRelease>", "<Cmd>lua require('player.ui.panel')._handle_release()<CR>", opts)
+    else
+      vim.keymap.set(mode, "<LeftDrag>", "<Nop>", opts)
+      vim.keymap.set(mode, "<LeftRelease>", "<Nop>", opts)
+    end
   end
 end
 
@@ -596,6 +562,52 @@ function M.toggle(state_snapshot)
     M.close()
   else
     M.open(state_snapshot)
+  end
+end
+
+-- Internal drag-to-move handlers, exposed on the module table so that
+-- <Cmd>lua require('player.ui.panel')._handle_drag()<CR> works from a
+-- string keymap (which is required to fully suppress built-in mouse events).
+
+function M._handle_drag()
+  if not is_valid_window() then
+    return
+  end
+  local mouse = vim.fn.getmousepos()
+  if not drag_start_mouse then
+    -- First drag event: capture starting positions
+    local win_cfg = vim.api.nvim_win_get_config(win)
+    drag_start_mouse = { row = mouse.screenrow, col = mouse.screencol }
+    drag_start_win = { row = win_cfg.row, col = win_cfg.col }
+    return
+  end
+  local dy = mouse.screenrow - drag_start_mouse.row
+  local dx = mouse.screencol - drag_start_mouse.col
+  local new_row = math.max(0, drag_start_win.row + dy)
+  local new_col = math.max(0, drag_start_win.col + dx)
+  vim.api.nvim_win_set_config(win, {
+    relative = "editor",
+    row = new_row,
+    col = new_col,
+  })
+  -- Re-render image after move so artwork tracks the window
+  if current_image then
+    render_seq = render_seq + 1
+    clear_current_image()
+    last_image_key = nil
+    local snapshot = state.current
+    if snapshot and snapshot.artwork and snapshot.artwork.path then
+      try_render_image(snapshot.artwork.path)
+    end
+  end
+end
+
+function M._handle_release()
+  drag_start_mouse = nil
+  drag_start_win = nil
+  -- Pin cursor back to top-left
+  if is_valid_window() then
+    vim.api.nvim_win_set_cursor(win, { 1, 0 })
   end
 end
 
