@@ -1,7 +1,7 @@
 local M = {}
 
 local defaults = {
-  player_priority = { "apple_music", "spotify" },
+  player_priority = { "apple_music", "spotify", "macos_media" },
   auto_switch = true,
   poll = {
     enabled = true,
