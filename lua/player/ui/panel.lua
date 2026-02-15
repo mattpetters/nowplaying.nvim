@@ -217,14 +217,15 @@ local function render(state_snapshot)
   end
 
   if not state_snapshot or state_snapshot.status == "inactive" then
-    table.insert(lines, center_text("NowPlaying.nvim", panel_width))
+    table.insert(lines, center_text("nowplaying", panel_width))
     table.insert(lines, center_text("No active player", panel_width))
   else
     local track = state_snapshot.track or {}
     local status_icon = state_snapshot.status == "playing" and "▶" or "⏸"
+    local player_label = state_snapshot.player_label or require("player.utils").format_provider(state_snapshot.player)
     local title_line = string.format(
-      "NowPlaying.nvim  │  Player: %s %s",
-      state_snapshot.player_label or require("player.utils").format_provider(state_snapshot.player),
+      "nowplaying  │  %s %s",
+      player_label,
       status_icon
     )
     table.insert(lines, center_text(title_line, panel_width))
