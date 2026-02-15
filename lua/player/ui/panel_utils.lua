@@ -120,4 +120,29 @@ function M.clamp_size(width, height, min_w, min_h, max_w, max_h)
   return { w, h }
 end
 
+--- Map any position inside a window to the nearest corner.
+--- Used for right-drag resize so the entire window is a resize target.
+--- Divides the window into four quadrants; the mouse's quadrant determines
+--- which corner anchors the resize.
+---@param rel_row number  0-indexed row relative to window top-left
+---@param rel_col number  0-indexed col relative to window top-left
+---@param total_width number  total window width (including border)
+---@param total_height number  total window height (including border)
+---@return string  "top_left", "top_right", "bottom_left", or "bottom_right"
+function M.nearest_corner(rel_row, rel_col, total_width, total_height)
+  local half_h = total_height / 2
+  local half_w = total_width / 2
+  local top = rel_row < half_h
+  local left = rel_col < half_w
+  if top and left then
+    return "top_left"
+  elseif top then
+    return "top_right"
+  elseif left then
+    return "bottom_left"
+  else
+    return "bottom_right"
+  end
+end
+
 return M

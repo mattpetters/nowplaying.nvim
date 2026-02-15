@@ -215,4 +215,81 @@ T["clamp_size"]["clamps width and height independently"] = function()
   MiniTest.expect.equality(r, { 30, 50 })
 end
 
+-- ── detect_zone edge-grab UX problem (documenting) ────────────
+-- With grab_size=2, a 62x22 total window (60+border) has only a
+-- 2-cell rim for resize.  Everything else (56x18 interior) returns
+-- "body".  This documents why edge-grab is nearly unusable.
+
+T["detect_zone"]["interior point 3 cells from edge is body with grab_size=2"] = function()
+  -- (2, 2) is just outside the 2-cell grab zone → body
+  local z = child.lua_get([[require("player.ui.panel_utils").detect_zone(2, 2, 62, 22, 2)]])
+  MiniTest.expect.equality(z, "body")
+end
+
+T["detect_zone"]["interior point at 25% in is body with grab_size=2"] = function()
+  -- (5, 15) well inside a 62x22 window → body
+  local z = child.lua_get([[require("player.ui.panel_utils").detect_zone(5, 15, 62, 22, 2)]])
+  MiniTest.expect.equality(z, "body")
+end
+
+-- ── nearest_corner ─────────────────────────────────────────────
+-- nearest_corner(rel_row, rel_col, total_width, total_height)
+-- Maps any position to the closest corner of the window.
+-- Used by right-drag resize so the entire window is a resize target.
+
+T["nearest_corner"] = MiniTest.new_set()
+
+T["nearest_corner"]["top-left quadrant"] = function()
+  -- (3, 5) in a 60x20 window → top-left
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(3, 5, 60, 20)]])
+  MiniTest.expect.equality(c, "top_left")
+end
+
+T["nearest_corner"]["top-right quadrant"] = function()
+  -- (3, 55) in a 60x20 window → top-right
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(3, 55, 60, 20)]])
+  MiniTest.expect.equality(c, "top_right")
+end
+
+T["nearest_corner"]["bottom-left quadrant"] = function()
+  -- (17, 5) in a 60x20 window → bottom-left
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(17, 5, 60, 20)]])
+  MiniTest.expect.equality(c, "bottom_left")
+end
+
+T["nearest_corner"]["bottom-right quadrant"] = function()
+  -- (17, 55) in a 60x20 window → bottom-right
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(17, 55, 60, 20)]])
+  MiniTest.expect.equality(c, "bottom_right")
+end
+
+T["nearest_corner"]["exact center rounds to bottom-right"] = function()
+  -- (10, 30) is exact center of 60x20; half-row=10, half-col=30
+  -- With >= comparisons, center falls into bottom-right
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(10, 30, 60, 20)]])
+  MiniTest.expect.equality(c, "bottom_right")
+end
+
+T["nearest_corner"]["origin is top-left"] = function()
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(0, 0, 60, 20)]])
+  MiniTest.expect.equality(c, "top_left")
+end
+
+T["nearest_corner"]["last cell is bottom-right"] = function()
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(19, 59, 60, 20)]])
+  MiniTest.expect.equality(c, "bottom_right")
+end
+
+T["nearest_corner"]["top edge center maps to top-right"] = function()
+  -- (0, 30) → top half, right half
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(0, 30, 60, 20)]])
+  MiniTest.expect.equality(c, "top_right")
+end
+
+T["nearest_corner"]["left edge center maps to bottom-left"] = function()
+  -- (10, 0) → bottom half, left half
+  local c = child.lua_get([[require("player.ui.panel_utils").nearest_corner(10, 0, 60, 20)]])
+  MiniTest.expect.equality(c, "bottom_left")
+end
+
 return T
