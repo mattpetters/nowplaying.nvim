@@ -1,0 +1,188 @@
+-- Unit tests for the colors module (adaptive accent color from album art)
+-- Tests pure color math functions: hex<->RGB, RGB<->HSL, ImageMagick
+-- output parsing, and accent color selection.
+local H = dofile("tests/helpers.lua")
+
+local T = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      _G.child = H.new_child()
+      child.lua([[_G.colors = require("player.ui.colors")]])
+    end,
+    post_once = function()
+      child.stop()
+    end,
+    pre_case = function()
+      child.lua([[
+        package.loaded["player.ui.colors"] = nil
+        _G.colors = require("player.ui.colors")
+      ]])
+    end,
+  },
+})
+
+-- ── hex_to_rgb ─────────────────────────────────────────────────
+
+T["hex_to_rgb"] = MiniTest.new_set()
+
+T["hex_to_rgb"]["parses 6-digit hex with hash"] = function()
+  local rgb = child.lua_get([[colors.hex_to_rgb("#FF0000")]])
+  MiniTest.expect.equality(rgb, { 255, 0, 0 })
+end
+
+T["hex_to_rgb"]["parses 6-digit hex without hash"] = function()
+  local rgb = child.lua_get([[colors.hex_to_rgb("00FF00")]])
+  MiniTest.expect.equality(rgb, { 0, 255, 0 })
+end
+
+T["hex_to_rgb"]["parses lowercase hex"] = function()
+  local rgb = child.lua_get([[colors.hex_to_rgb("#0000ff")]])
+  MiniTest.expect.equality(rgb, { 0, 0, 255 })
+end
+
+T["hex_to_rgb"]["parses mixed case"] = function()
+  local rgb = child.lua_get([[colors.hex_to_rgb("#2D9FDA")]])
+  MiniTest.expect.equality(rgb, { 45, 159, 218 })
+end
+
+T["hex_to_rgb"]["returns nil for invalid input"] = function()
+  local rgb = child.lua_get([[colors.hex_to_rgb("not-a-color")]])
+  MiniTest.expect.equality(rgb, vim.NIL)
+end
+
+-- ── rgb_to_hex ─────────────────────────────────────────────────
+
+T["rgb_to_hex"] = MiniTest.new_set()
+
+T["rgb_to_hex"]["converts red"] = function()
+  local hex = child.lua_get([[colors.rgb_to_hex(255, 0, 0)]])
+  MiniTest.expect.equality(hex, "#ff0000")
+end
+
+T["rgb_to_hex"]["converts arbitrary color"] = function()
+  local hex = child.lua_get([[colors.rgb_to_hex(45, 159, 218)]])
+  MiniTest.expect.equality(hex, "#2d9fda")
+end
+
+T["rgb_to_hex"]["zero-pads single digit values"] = function()
+  local hex = child.lua_get([[colors.rgb_to_hex(0, 5, 10)]])
+  MiniTest.expect.equality(hex, "#00050a")
+end
+
+-- ── rgb_to_hsl ─────────────────────────────────────────────────
+
+T["rgb_to_hsl"] = MiniTest.new_set()
+
+T["rgb_to_hsl"]["pure red"] = function()
+  local hsl = child.lua_get([[colors.rgb_to_hsl(255, 0, 0)]])
+  -- H=0, S=1, L=0.5
+  MiniTest.expect.equality(hsl[1], 0)
+  MiniTest.expect.equality(hsl[2], 1)
+  MiniTest.expect.equality(hsl[3], 0.5)
+end
+
+T["rgb_to_hsl"]["pure white"] = function()
+  local hsl = child.lua_get([[colors.rgb_to_hsl(255, 255, 255)]])
+  MiniTest.expect.equality(hsl[2], 0)   -- saturation = 0
+  MiniTest.expect.equality(hsl[3], 1)   -- lightness = 1
+end
+
+T["rgb_to_hsl"]["pure black"] = function()
+  local hsl = child.lua_get([[colors.rgb_to_hsl(0, 0, 0)]])
+  MiniTest.expect.equality(hsl[2], 0)   -- saturation = 0
+  MiniTest.expect.equality(hsl[3], 0)   -- lightness = 0
+end
+
+T["rgb_to_hsl"]["mid gray has zero saturation"] = function()
+  local hsl = child.lua_get([[colors.rgb_to_hsl(128, 128, 128)]])
+  MiniTest.expect.equality(hsl[2], 0)
+end
+
+-- ── parse_magick_output ────────────────────────────────────────
+
+T["parse_magick_output"] = MiniTest.new_set()
+
+T["parse_magick_output"]["extracts hex colors from ImageMagick txt output"] = function()
+  local output = [[# ImageMagick pixel enumeration: 5,1,0,255,srgba
+0,0: (63,142,146,1)  #3F8E9201  srgba(24.7165%,55.8601%,57.2064%,0.00428312)
+1,0: (44,128,166,84)  #2C80A654  srgba(17.2353%,50.0041%,65.2579%,0.3288)
+2,0: (94,175,92,235)  #5EAF5CEB  srgba(36.8175%,68.7933%,36.1917%,0.92239)
+3,0: (25,110,195,243)  #196EC3F3  srgba(9.79999%,43.0792%,76.5556%,0.954733)
+4,0: (45,159,218,252)  #2D9FDAFC  srgba(17.7763%,62.2133%,85.3605%,0.987018)]]
+
+  local result = child.lua_get(string.format([[colors.parse_magick_output(%q)]], output))
+  -- Should extract 5 hex colors (6-digit, dropping the alpha bytes)
+  MiniTest.expect.equality(#result, 5)
+  MiniTest.expect.equality(result[1], "#3f8e92")
+  MiniTest.expect.equality(result[5], "#2d9fda")
+end
+
+T["parse_magick_output"]["handles srgb output without alpha"] = function()
+  local output = [[# ImageMagick pixel enumeration: 3,1,0,255,srgb
+0,0: (255,0,0)  #FF0000  srgb(100%,0%,0%)
+1,0: (0,128,0)  #008000  srgb(0%,50.1961%,0%)
+2,0: (0,0,255)  #0000FF  srgb(0%,0%,100%)]]
+
+  local result = child.lua_get(string.format([[colors.parse_magick_output(%q)]], output))
+  MiniTest.expect.equality(#result, 3)
+  MiniTest.expect.equality(result[1], "#ff0000")
+  MiniTest.expect.equality(result[2], "#008000")
+  MiniTest.expect.equality(result[3], "#0000ff")
+end
+
+T["parse_magick_output"]["returns empty table for empty input"] = function()
+  local result = child.lua_get([[colors.parse_magick_output("")]])
+  MiniTest.expect.equality(#result, 0)
+end
+
+T["parse_magick_output"]["ignores comment line"] = function()
+  local output = [[# ImageMagick pixel enumeration: 1,1,0,255,srgb
+0,0: (100,200,50)  #64C832  srgb(39.2%,78.4%,19.6%)]]
+  local result = child.lua_get(string.format([[colors.parse_magick_output(%q)]], output))
+  MiniTest.expect.equality(#result, 1)
+  MiniTest.expect.equality(result[1], "#64c832")
+end
+
+-- ── pick_accent ────────────────────────────────────────────────
+
+T["pick_accent"] = MiniTest.new_set()
+
+T["pick_accent"]["picks the most saturated color"] = function()
+  -- Red is fully saturated, gray is not
+  local result = child.lua_get([[colors.pick_accent({"#808080", "#FF0000", "#C0C0C0"})]])
+  MiniTest.expect.equality(result, "#ff0000")
+end
+
+T["pick_accent"]["filters out near-black"] = function()
+  -- Only near-black colors -> should return nil
+  local result = child.lua_get([[colors.pick_accent({"#0A0A0A", "#050505", "#0F0F0F"})]])
+  MiniTest.expect.equality(result, vim.NIL)
+end
+
+T["pick_accent"]["filters out near-white"] = function()
+  local result = child.lua_get([[colors.pick_accent({"#F5F5F5", "#FAFAFA", "#FFFFFF"})]])
+  MiniTest.expect.equality(result, vim.NIL)
+end
+
+T["pick_accent"]["filters out grays (low saturation)"] = function()
+  local result = child.lua_get([[colors.pick_accent({"#808080", "#909090", "#707070"})]])
+  MiniTest.expect.equality(result, vim.NIL)
+end
+
+T["pick_accent"]["returns nil for empty list"] = function()
+  local result = child.lua_get([[colors.pick_accent({})]])
+  MiniTest.expect.equality(result, vim.NIL)
+end
+
+T["pick_accent"]["picks vibrant color over muted one"] = function()
+  -- Bright blue vs muted brownish
+  local result = child.lua_get([[colors.pick_accent({"#8B7355", "#2D9FDA"})]])
+  MiniTest.expect.equality(result, "#2d9fda")
+end
+
+T["pick_accent"]["accepts single viable color"] = function()
+  local result = child.lua_get([[colors.pick_accent({"#E84393"})]])
+  MiniTest.expect.equality(result, "#e84393")
+end
+
+return T

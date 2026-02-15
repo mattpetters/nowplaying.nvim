@@ -1,6 +1,7 @@
 local config = require("player.config")
 local state = require("player.state")
 local panel_utils = require("player.ui.panel_utils")
+local colors = require("player.ui.colors")
 
 local M = {}
 
@@ -12,6 +13,7 @@ local current_image -- Track current image object for cleanup
 local last_artwork_path -- Track the last artwork path to avoid re-rendering
 local last_image_key -- Track render geometry to avoid stale image placement
 local render_seq = 0 -- Monotonic token to discard stale deferred renders
+local last_accent_artwork = nil -- Track artwork path used for last accent extraction
 
 local function clear_current_image()
   if current_image then
@@ -265,6 +267,31 @@ local function render(state_snapshot)
       clear_current_image()
       last_artwork_path = nil
       last_image_key = nil
+    end
+
+    -- Adaptive accent color from album art
+    local panel_cfg_inner = config.get().panel
+    if panel_cfg_inner.adaptive_colors then
+      local art_path = state_snapshot.artwork and state_snapshot.artwork.path
+      if art_path and art_path ~= "" and art_path ~= last_accent_artwork then
+        last_accent_artwork = art_path
+        colors.extract_accent(art_path, function(accent_hex)
+          if is_valid_window() then
+            if accent_hex then
+              colors.apply_accent(win, accent_hex)
+            else
+              colors.clear_accent(win)
+            end
+          end
+        end)
+      elseif not art_path or art_path == "" then
+        if last_accent_artwork then
+          last_accent_artwork = nil
+          if is_valid_window() then
+            colors.clear_accent(win)
+          end
+        end
+      end
     end
 
     if panel_elements.progress_bar then
@@ -548,8 +575,10 @@ function M.close()
   render_seq = render_seq + 1
   last_artwork_path = nil
   last_image_key = nil
+  last_accent_artwork = nil
 
   if is_valid_window() then
+    colors.clear_accent(win)
     vim.api.nvim_win_close(win, true)
   end
   win = nil
