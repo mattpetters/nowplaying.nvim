@@ -1,6 +1,7 @@
 local config = require("player.config")
 local state = require("player.state")
 local panel_utils = require("player.ui.panel_utils")
+local colors = require("player.ui.colors")
 
 local M = {}
 
@@ -8,10 +9,13 @@ local buf, win
 local current_width, current_height
 local drag_start_mouse = nil -- { row, col } of mouse when drag began
 local drag_start_win = nil -- { row, col } of window when drag began
+local drag_start_size = nil -- { width, height } of window when drag began
+local drag_mode = nil -- "move" or a resize zone string (e.g. "bottom_right")
 local current_image -- Track current image object for cleanup
 local last_artwork_path -- Track the last artwork path to avoid re-rendering
 local last_image_key -- Track render geometry to avoid stale image placement
 local render_seq = 0 -- Monotonic token to discard stale deferred renders
+local last_accent_artwork = nil -- Track artwork path used for last accent extraction
 
 local function clear_current_image()
   if current_image then
@@ -267,6 +271,31 @@ local function render(state_snapshot)
       last_image_key = nil
     end
 
+    -- Adaptive accent color from album art
+    local panel_cfg_inner = config.get().panel
+    if panel_cfg_inner.adaptive_colors then
+      local art_path = state_snapshot.artwork and state_snapshot.artwork.path
+      if art_path and art_path ~= "" and art_path ~= last_accent_artwork then
+        last_accent_artwork = art_path
+        colors.extract_accent(art_path, function(accent_hex)
+          if is_valid_window() then
+            if accent_hex then
+              colors.apply_accent(win, accent_hex)
+            else
+              colors.clear_accent(win)
+            end
+          end
+        end)
+      elseif not art_path or art_path == "" then
+        if last_accent_artwork then
+          last_accent_artwork = nil
+          if is_valid_window() then
+            colors.clear_accent(win)
+          end
+        end
+      end
+    end
+
     if panel_elements.progress_bar then
       table.insert(lines, string.rep(" ", panel_width))
       local pos = format_time(state_snapshot.position)
@@ -404,7 +433,7 @@ local function ensure_keymaps()
   -- without mode changes and without triggering built-in mouse behaviour.
 
   local panel_cfg = config.get().panel
-  local draggable = panel_cfg.draggable
+  local interactive = panel_cfg.draggable or panel_cfg.resizable
 
   -- Block all mouse clicks, drags, and releases from doing anything by default.
   -- <Nop> as a string RHS prevents the built-in cursor-move/selection behaviour.
@@ -416,7 +445,7 @@ local function ensure_keymaps()
     vim.keymap.set(mode, "<RightMouse>", "<Nop>", opts)
     vim.keymap.set(mode, "<MiddleMouse>", "<Nop>", opts)
 
-    if draggable then
+    if interactive then
       -- Use <Cmd> to run drag logic without triggering built-in mouse behaviour
       vim.keymap.set(mode, "<LeftDrag>", "<Cmd>lua require('player.ui.panel')._handle_drag()<CR>", opts)
       vim.keymap.set(mode, "<LeftRelease>", "<Cmd>lua require('player.ui.panel')._handle_release()<CR>", opts)
@@ -548,8 +577,10 @@ function M.close()
   render_seq = render_seq + 1
   last_artwork_path = nil
   last_image_key = nil
+  last_accent_artwork = nil
 
   if is_valid_window() then
+    colors.clear_accent(win)
     vim.api.nvim_win_close(win, true)
   end
   win = nil
@@ -565,32 +596,13 @@ function M.toggle(state_snapshot)
   end
 end
 
--- Internal drag-to-move handlers, exposed on the module table so that
+-- Internal drag handlers, exposed on the module table so that
 -- <Cmd>lua require('player.ui.panel')._handle_drag()<CR> works from a
 -- string keymap (which is required to fully suppress built-in mouse events).
+-- On the first drag event we detect the zone (edge/corner vs body) and
+-- set drag_mode to either "move" or a resize zone string.
 
-function M._handle_drag()
-  if not is_valid_window() then
-    return
-  end
-  local mouse = vim.fn.getmousepos()
-  if not drag_start_mouse then
-    -- First drag event: capture starting positions
-    local win_cfg = vim.api.nvim_win_get_config(win)
-    drag_start_mouse = { row = mouse.screenrow, col = mouse.screencol }
-    drag_start_win = { row = win_cfg.row, col = win_cfg.col }
-    return
-  end
-  local dy = mouse.screenrow - drag_start_mouse.row
-  local dx = mouse.screencol - drag_start_mouse.col
-  local new_row = math.max(0, drag_start_win.row + dy)
-  local new_col = math.max(0, drag_start_win.col + dx)
-  vim.api.nvim_win_set_config(win, {
-    relative = "editor",
-    row = new_row,
-    col = new_col,
-  })
-  -- Re-render image after move so artwork tracks the window
+local function refresh_image_after_geometry_change()
   if current_image then
     render_seq = render_seq + 1
     clear_current_image()
@@ -602,9 +614,123 @@ function M._handle_drag()
   end
 end
 
+function M._handle_drag()
+  if not is_valid_window() then
+    return
+  end
+  local mouse = vim.fn.getmousepos()
+  local panel_cfg = config.get().panel
+
+  if not drag_start_mouse then
+    -- First drag event: capture starting positions and detect zone
+    local win_cfg = vim.api.nvim_win_get_config(win)
+    drag_start_mouse = { row = mouse.screenrow, col = mouse.screencol }
+    drag_start_win = { row = win_cfg.row, col = win_cfg.col }
+    drag_start_size = { width = current_width, height = current_height }
+
+    -- Determine whether this is a move or resize based on click position.
+    -- The border adds 1 cell on each side for "rounded" style, so total
+    -- dimensions including border are (width + 2) x (height + 2).
+    local border_w = 1  -- assume 1-cell border on each side
+    local total_w = current_width + border_w * 2
+    local total_h = current_height + border_w * 2
+    -- Compute mouse position relative to window top-left (including border).
+    -- win_cfg.row/col are the content area origin; border is 1 cell above/left.
+    local rel_row = mouse.screenrow - (win_cfg.row + 1 - border_w)  -- 0-indexed
+    local rel_col = mouse.screencol - (win_cfg.col + 1 - border_w)  -- 0-indexed
+
+    local grab_size = 2
+    local zone = panel_utils.detect_zone(rel_row, rel_col, total_w, total_h, grab_size)
+
+    if zone == "body" or not panel_cfg.resizable then
+      drag_mode = "move"
+    else
+      drag_mode = zone
+    end
+    return
+  end
+
+  local dy = mouse.screenrow - drag_start_mouse.row
+  local dx = mouse.screencol - drag_start_mouse.col
+
+  if drag_mode == "move" then
+    -- Drag-to-move (existing behaviour)
+    if not panel_cfg.draggable then
+      return
+    end
+    local new_row = math.max(0, drag_start_win.row + dy)
+    local new_col = math.max(0, drag_start_win.col + dx)
+    vim.api.nvim_win_set_config(win, {
+      relative = "editor",
+      row = new_row,
+      col = new_col,
+    })
+    refresh_image_after_geometry_change()
+  else
+    -- Resize based on drag_mode zone
+    local min_w = panel_cfg.min_width or 30
+    local min_h = panel_cfg.min_height or 8
+    local max_w = vim.o.columns - 4
+    local max_h = vim.o.lines - 4
+
+    local new_w = drag_start_size.width
+    local new_h = drag_start_size.height
+    local new_row = drag_start_win.row
+    local new_col = drag_start_win.col
+
+    -- Width changes
+    if drag_mode == "right" or drag_mode == "top_right" or drag_mode == "bottom_right" then
+      new_w = drag_start_size.width + dx
+    elseif drag_mode == "left" or drag_mode == "top_left" or drag_mode == "bottom_left" then
+      new_w = drag_start_size.width - dx
+      new_col = drag_start_win.col + dx
+    end
+
+    -- Height changes
+    if drag_mode == "bottom" or drag_mode == "bottom_left" or drag_mode == "bottom_right" then
+      new_h = drag_start_size.height + dy
+    elseif drag_mode == "top" or drag_mode == "top_left" or drag_mode == "top_right" then
+      new_h = drag_start_size.height - dy
+      new_row = drag_start_win.row + dy
+    end
+
+    -- Clamp
+    local clamped = panel_utils.clamp_size(new_w, new_h, min_w, min_h, max_w, max_h)
+    new_w = clamped[1]
+    new_h = clamped[2]
+
+    -- If clamping changed the size, adjust position for left/top anchored resizes
+    -- so the opposite edge stays put.
+    if drag_mode == "left" or drag_mode == "top_left" or drag_mode == "bottom_left" then
+      new_col = drag_start_win.col + (drag_start_size.width - new_w)
+    end
+    if drag_mode == "top" or drag_mode == "top_left" or drag_mode == "top_right" then
+      new_row = drag_start_win.row + (drag_start_size.height - new_h)
+    end
+
+    new_row = math.max(0, new_row)
+    new_col = math.max(0, new_col)
+
+    current_width = new_w
+    current_height = new_h
+    vim.api.nvim_win_set_config(win, {
+      relative = "editor",
+      width = new_w,
+      height = new_h,
+      row = new_row,
+      col = new_col,
+    })
+    -- Re-render content to fill the new dimensions
+    render(state.current or { status = "inactive" })
+    refresh_image_after_geometry_change()
+  end
+end
+
 function M._handle_release()
   drag_start_mouse = nil
   drag_start_win = nil
+  drag_start_size = nil
+  drag_mode = nil
   -- Pin cursor back to top-left
   if is_valid_window() then
     vim.api.nvim_win_set_cursor(win, { 1, 0 })

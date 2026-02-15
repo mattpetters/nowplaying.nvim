@@ -73,6 +73,7 @@ end
 local provider_labels = {
   apple_music = "Apple Music",
   spotify = "Spotify",
+  macos_media = "Now Playing",
 }
 
 function M.format_provider(name)

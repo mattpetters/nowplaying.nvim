@@ -1,7 +1,7 @@
 local M = {}
 
 local defaults = {
-  player_priority = { "apple_music", "spotify" },
+  player_priority = { "apple_music", "spotify", "macos_media" },
   auto_switch = true,
   poll = {
     enabled = true,
@@ -56,6 +56,10 @@ local defaults = {
     enabled = true,
     border = "rounded",
     draggable = true, -- click and drag to move the panel
+    resizable = true, -- click and drag edges/corners to resize
+    adaptive_colors = true, -- extract accent color from album art for border
+    min_width = 30, -- minimum panel width when resizing
+    min_height = 8, -- minimum panel height when resizing
     width = nil, -- fixed width if set; otherwise fallback width
     height = nil, -- fixed height if set; otherwise auto-size
     elements = {
