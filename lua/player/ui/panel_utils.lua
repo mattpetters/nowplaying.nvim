@@ -60,4 +60,64 @@ function M.progress_bar(position, duration, width)
   return string.rep("█", filled) .. string.rep("░", width - filled)
 end
 
+--- Detect which zone of a window the mouse is in.
+--- Used to decide between drag-to-move (body) and resize (edge/corner).
+---@param rel_row number  0-indexed row relative to window top-left (including border)
+---@param rel_col number  0-indexed col relative to window top-left (including border)
+---@param total_width number  total window width including border
+---@param total_height number  total window height including border
+---@param grab_size number  how many cells from each edge count as resize zone
+---@return string  one of "body", "top", "bottom", "left", "right",
+---                "top_left", "top_right", "bottom_left", "bottom_right"
+function M.detect_zone(rel_row, rel_col, total_width, total_height, grab_size)
+  local near_top = rel_row < grab_size
+  local near_bottom = rel_row >= total_height - grab_size
+  local near_left = rel_col < grab_size
+  local near_right = rel_col >= total_width - grab_size
+
+  -- Corners (both axes in grab zone)
+  if near_top and near_left then
+    return "top_left"
+  end
+  if near_top and near_right then
+    return "top_right"
+  end
+  if near_bottom and near_left then
+    return "bottom_left"
+  end
+  if near_bottom and near_right then
+    return "bottom_right"
+  end
+
+  -- Edges (single axis)
+  if near_top then
+    return "top"
+  end
+  if near_bottom then
+    return "bottom"
+  end
+  if near_left then
+    return "left"
+  end
+  if near_right then
+    return "right"
+  end
+
+  return "body"
+end
+
+--- Clamp a width/height pair to min/max bounds.
+---@param width number
+---@param height number
+---@param min_w number
+---@param min_h number
+---@param max_w number
+---@param max_h number
+---@return number[]  {clamped_width, clamped_height}
+function M.clamp_size(width, height, min_w, min_h, max_w, max_h)
+  local w = math.max(min_w, math.min(width, max_w))
+  local h = math.max(min_h, math.min(height, max_h))
+  return { w, h }
+end
+
 return M
