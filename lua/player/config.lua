@@ -70,9 +70,9 @@ local defaults = {
       volume = true,
       controls = true,
       artwork = {
-        enabled = false, -- enable/disable artwork rendering
+        enabled = true, -- enable/disable artwork rendering
         cache_dir = vim.fn.stdpath("cache") .. "/nowplaying.nvim",
-        download = false, -- download remote artwork (Spotify URLs)
+        download = true, -- download remote artwork (Spotify URLs)
         width = 20,
         height = 10,
       },
