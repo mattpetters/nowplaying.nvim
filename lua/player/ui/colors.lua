@@ -68,6 +68,67 @@ function M.rgb_to_hsl(r, g, b)
   return { h, s, l }
 end
 
+--- Convert HSL (h: 0-360, s: 0-1, l: 0-1) to RGB (0-255 each).
+---@param h number  hue 0-360
+---@param s number  saturation 0-1
+---@param l number  lightness 0-1
+---@return number[]  {r, g, b} each 0-255
+function M.hsl_to_rgb(h, s, l)
+  if s == 0 then
+    local v = math.floor(l * 255 + 0.5)
+    return { v, v, v }
+  end
+
+  local function hue2rgb(p, q, t)
+    if t < 0 then t = t + 1 end
+    if t > 1 then t = t - 1 end
+    if t < 1 / 6 then return p + (q - p) * 6 * t end
+    if t < 1 / 2 then return q end
+    if t < 2 / 3 then return p + (q - p) * (2 / 3 - t) * 6 end
+    return p
+  end
+
+  local q = l < 0.5 and (l * (1 + s)) or (l + s - l * s)
+  local p = 2 * l - q
+  local hk = h / 360
+
+  local r = hue2rgb(p, q, hk + 1 / 3)
+  local g = hue2rgb(p, q, hk)
+  local b = hue2rgb(p, q, hk - 1 / 3)
+
+  return {
+    math.floor(r * 255 + 0.5),
+    math.floor(g * 255 + 0.5),
+    math.floor(b * 255 + 0.5),
+  }
+end
+
+--- Lighten a hex color by shifting its HSL lightness up.
+---@param hex string  e.g. "#ff0000"
+---@param amount number  0-1, how much to increase lightness
+---@return string  lightened hex color
+function M.lighten(hex, amount)
+  local rgb = M.hex_to_rgb(hex)
+  if not rgb then return hex end
+  local hsl = M.rgb_to_hsl(rgb[1], rgb[2], rgb[3])
+  local new_l = math.min(1, hsl[3] + amount)
+  local new_rgb = M.hsl_to_rgb(hsl[1], hsl[2], new_l)
+  return M.rgb_to_hex(new_rgb[1], new_rgb[2], new_rgb[3])
+end
+
+--- Darken a hex color by shifting its HSL lightness down.
+---@param hex string  e.g. "#ff0000"
+---@param amount number  0-1, how much to decrease lightness
+---@return string  darkened hex color
+function M.darken(hex, amount)
+  local rgb = M.hex_to_rgb(hex)
+  if not rgb then return hex end
+  local hsl = M.rgb_to_hsl(rgb[1], rgb[2], rgb[3])
+  local new_l = math.max(0, hsl[3] - amount)
+  local new_rgb = M.hsl_to_rgb(hsl[1], hsl[2], new_l)
+  return M.rgb_to_hex(new_rgb[1], new_rgb[2], new_rgb[3])
+end
+
 --- Parse ImageMagick `txt:-` output into a list of hex color strings.
 --- Handles both srgb and srgba output formats.
 --- ImageMagick output lines look like:
@@ -175,6 +236,8 @@ function M.extract_accent(image_path, callback)
 end
 
 --- Apply accent color to a floating window via window-local highlight groups.
+--- Creates a darkened border color and a very light tinted background
+--- from the extracted accent to give the panel depth.
 ---@param win number  window ID
 ---@param accent_hex string  e.g. "#e84393"
 function M.apply_accent(win, accent_hex)
@@ -185,13 +248,16 @@ function M.apply_accent(win, accent_hex)
     return
   end
 
-  -- Create window-scoped highlight groups
-  vim.api.nvim_set_hl(0, "NowPlayingBorder", { fg = accent_hex })
-  vim.api.nvim_set_hl(0, "NowPlayingAccent", { fg = accent_hex })
+  local border_hex = M.darken(accent_hex, 0.15)
+  local bg_hex = M.lighten(accent_hex, 0.35)
+
+  -- Create highlight groups for the accent theme
+  vim.api.nvim_set_hl(0, "NowPlayingBorder", { fg = border_hex, bg = bg_hex })
+  vim.api.nvim_set_hl(0, "NowPlayingBg", { bg = bg_hex })
+  vim.api.nvim_set_hl(0, "NowPlayingAccent", { fg = accent_hex, bg = bg_hex })
 
   -- Apply to the window via winhighlight
   local whl = vim.api.nvim_get_option_value("winhighlight", { win = win })
-  -- Remove any existing NowPlaying overrides, then append ours
   local parts = {}
   if whl and whl ~= "" then
     for part in whl:gmatch("[^,]+") do
@@ -201,6 +267,7 @@ function M.apply_accent(win, accent_hex)
     end
   end
   table.insert(parts, "FloatBorder:NowPlayingBorder")
+  table.insert(parts, "Normal:NowPlayingBg")
   vim.api.nvim_set_option_value("winhighlight", table.concat(parts, ","), { win = win })
 end
 

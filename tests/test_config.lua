@@ -32,10 +32,11 @@ T["defaults"]["panel draggable is true by default"] = function()
   MiniTest.expect.equality(draggable, true)
 end
 
-T["defaults"]["panel border is rounded by default"] = function()
+T["defaults"]["panel border uses block chars by default"] = function()
   child.lua([[require("player.config").setup({})]])
   local border = child.lua_get([[require("player.config").get().panel.border]])
-  MiniTest.expect.equality(border, "rounded")
+  MiniTest.expect.equality(type(border), "table")
+  MiniTest.expect.equality(#border, 8)
 end
 
 T["defaults"]["panel width and height are nil by default"] = function()

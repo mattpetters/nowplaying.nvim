@@ -185,4 +185,81 @@ T["pick_accent"]["accepts single viable color"] = function()
   MiniTest.expect.equality(result, "#e84393")
 end
 
+-- ── hsl_to_rgb ─────────────────────────────────────────────────
+
+T["hsl_to_rgb"] = MiniTest.new_set()
+
+T["hsl_to_rgb"]["pure red"] = function()
+  local rgb = child.lua_get([[colors.hsl_to_rgb(0, 1, 0.5)]])
+  MiniTest.expect.equality(rgb, { 255, 0, 0 })
+end
+
+T["hsl_to_rgb"]["pure green"] = function()
+  local rgb = child.lua_get([[colors.hsl_to_rgb(120, 1, 0.5)]])
+  MiniTest.expect.equality(rgb, { 0, 255, 0 })
+end
+
+T["hsl_to_rgb"]["pure blue"] = function()
+  local rgb = child.lua_get([[colors.hsl_to_rgb(240, 1, 0.5)]])
+  MiniTest.expect.equality(rgb, { 0, 0, 255 })
+end
+
+T["hsl_to_rgb"]["white"] = function()
+  local rgb = child.lua_get([[colors.hsl_to_rgb(0, 0, 1)]])
+  MiniTest.expect.equality(rgb, { 255, 255, 255 })
+end
+
+T["hsl_to_rgb"]["black"] = function()
+  local rgb = child.lua_get([[colors.hsl_to_rgb(0, 0, 0)]])
+  MiniTest.expect.equality(rgb, { 0, 0, 0 })
+end
+
+T["hsl_to_rgb"]["mid gray"] = function()
+  local rgb = child.lua_get([[colors.hsl_to_rgb(0, 0, 0.5)]])
+  MiniTest.expect.equality(rgb, { 128, 128, 128 })
+end
+
+-- ── lighten / darken ───────────────────────────────────────────
+
+T["lighten"] = MiniTest.new_set()
+
+T["lighten"]["lightens a color by given amount"] = function()
+  -- Pure red (L=0.5) lightened by 0.4 → L=0.9
+  local hex = child.lua_get([[colors.lighten("#ff0000", 0.4)]])
+  -- H=0, S=1, L=0.9 → very light red/pink
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], hex))
+  -- L=0.9 should give a light pinkish red
+  MiniTest.expect.equality(rgb[1] > 200, true)
+  MiniTest.expect.equality(rgb[2] > 100, true)
+end
+
+T["lighten"]["clamps at lightness 1.0"] = function()
+  -- Already light color lightened a lot → should not exceed white
+  local hex = child.lua_get([[colors.lighten("#ffcccc", 0.5)]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], hex))
+  MiniTest.expect.equality(rgb[1] <= 255, true)
+  MiniTest.expect.equality(rgb[2] <= 255, true)
+  MiniTest.expect.equality(rgb[3] <= 255, true)
+end
+
+T["darken"] = MiniTest.new_set()
+
+T["darken"]["darkens a color by given amount"] = function()
+  -- Pure red (L=0.5) darkened by 0.3 → L=0.2
+  local hex = child.lua_get([[colors.darken("#ff0000", 0.3)]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], hex))
+  -- Should be a dark red
+  MiniTest.expect.equality(rgb[1] > 50, true)
+  MiniTest.expect.equality(rgb[1] < 150, true)
+  MiniTest.expect.equality(rgb[2] < 20, true)
+end
+
+T["darken"]["clamps at lightness 0.0"] = function()
+  local hex = child.lua_get([[colors.darken("#330000", 0.9)]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], hex))
+  MiniTest.expect.equality(rgb[1] >= 0, true)
+  MiniTest.expect.equality(rgb[2] >= 0, true)
+  MiniTest.expect.equality(rgb[3] >= 0, true)
+end
+
 return T

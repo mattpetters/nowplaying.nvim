@@ -217,7 +217,7 @@ T["format_provider"]["formats macos_media nicely"] = function()
   local label = child.lua_get([[
     require("player.utils").format_provider("macos_media")
   ]])
-  MiniTest.expect.equality(label, "󰎆 Now Playing")
+  MiniTest.expect.equality(label, "\u{f001} Now Playing")
 end
 
 return T

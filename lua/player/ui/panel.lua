@@ -635,6 +635,11 @@ function M._handle_drag()
     local win_cfg = vim.api.nvim_win_get_config(win)
     drag_start_mouse = { row = mouse.screenrow, col = mouse.screencol }
     drag_start_win = { row = win_cfg.row, col = win_cfg.col }
+    -- Clear the image once at the start of the drag so it doesn't
+    -- ghost at the old position while the window moves.
+    render_seq = render_seq + 1
+    clear_current_image()
+    last_image_key = nil
     return
   end
   local dy = mouse.screenrow - drag_start_mouse.row
@@ -646,7 +651,8 @@ function M._handle_drag()
     row = new_row,
     col = new_col,
   })
-  refresh_image_after_geometry_change()
+  -- Do NOT re-render the image during drag — it causes flicker and ghosts.
+  -- The image is re-rendered on release once the window has settled.
 end
 
 function M._handle_release()
@@ -654,6 +660,8 @@ function M._handle_release()
   drag_start_win = nil
   if is_valid_window() then
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
+    -- Re-render artwork at the new position after the drag ends.
+    refresh_image_after_geometry_change()
   end
 end
 
@@ -680,6 +688,10 @@ function M._handle_resize_drag()
     local rel_row = mouse.screenrow - (win_cfg.row + 1 - border_w)
     local rel_col = mouse.screencol - (win_cfg.col + 1 - border_w)
     resize_corner = panel_utils.nearest_corner(rel_row, rel_col, total_w, total_h)
+    -- Clear artwork during resize to avoid ghosts
+    render_seq = render_seq + 1
+    clear_current_image()
+    last_image_key = nil
     return
   end
 
@@ -736,7 +748,7 @@ function M._handle_resize_drag()
     col = new_col,
   })
   render(state.current or { status = "inactive" })
-  refresh_image_after_geometry_change()
+  -- Do NOT re-render image during resize — wait for release.
 end
 
 function M._handle_resize_release()
@@ -746,6 +758,7 @@ function M._handle_resize_release()
   resize_corner = nil
   if is_valid_window() then
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
+    refresh_image_after_geometry_change()
   end
 end
 

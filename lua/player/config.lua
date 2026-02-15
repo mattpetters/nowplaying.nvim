@@ -54,7 +54,7 @@ local defaults = {
   },
   panel = {
     enabled = true,
-    border = "rounded",
+    border = { "▛", "▀", "▜", "▐", "▟", "▄", "▙", "▌" },
     draggable = true, -- click and drag to move the panel
     resizable = true, -- click and drag edges/corners to resize
     adaptive_colors = true, -- extract accent color from album art for border
