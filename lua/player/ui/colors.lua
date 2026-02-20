@@ -235,9 +235,22 @@ function M.extract_accent(image_path, callback)
   end
 end
 
+--- Desaturate a hex color by blending its saturation toward zero.
+---@param hex string  e.g. "#ff0000"
+---@param amount number  0-1, how much to reduce saturation (1 = fully gray)
+---@return string  desaturated hex color
+function M.desaturate(hex, amount)
+  local rgb = M.hex_to_rgb(hex)
+  if not rgb then return hex end
+  local hsl = M.rgb_to_hsl(rgb[1], rgb[2], rgb[3])
+  local new_s = math.max(0, hsl[2] * (1 - amount))
+  local new_rgb = M.hsl_to_rgb(hsl[1], new_s, hsl[3])
+  return M.rgb_to_hex(new_rgb[1], new_rgb[2], new_rgb[3])
+end
+
 --- Apply accent color to a floating window via window-local highlight groups.
---- Creates a darkened border color and a very light tinted background
---- from the extracted accent to give the panel depth.
+--- Creates a muted border tint and a very subtle background wash from the
+--- extracted accent so the panel blends with the editor rather than popping.
 ---@param win number  window ID
 ---@param accent_hex string  e.g. "#e84393"
 function M.apply_accent(win, accent_hex)
@@ -248,11 +261,16 @@ function M.apply_accent(win, accent_hex)
     return
   end
 
-  local border_hex = M.darken(accent_hex, 0.15)
-  local bg_hex = M.lighten(accent_hex, 0.35)
+  -- Border: use the accent but pull it toward the dark end so it reads
+  -- as a subtle colored frame rather than a neon outline.
+  local border_hex = M.darken(M.desaturate(accent_hex, 0.3), 0.2)
+
+  -- Background: heavily desaturate and push very close to the editor bg
+  -- so it's barely perceptible — a tint, not a paint bucket.
+  local bg_hex = M.desaturate(M.lighten(accent_hex, 0.38), 0.75)
 
   -- Create highlight groups for the accent theme
-  vim.api.nvim_set_hl(0, "NowPlayingBorder", { fg = border_hex, bg = bg_hex })
+  vim.api.nvim_set_hl(0, "NowPlayingBorder", { fg = border_hex })
   vim.api.nvim_set_hl(0, "NowPlayingBg", { bg = bg_hex })
   vim.api.nvim_set_hl(0, "NowPlayingAccent", { fg = accent_hex, bg = bg_hex })
 

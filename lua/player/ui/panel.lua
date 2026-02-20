@@ -372,6 +372,9 @@ local function ensure_keymaps()
   vim.keymap.set("n", "r", function()
     state.refresh()
   end, opts)
+  vim.keymap.set("n", "R", function()
+    M.force_redraw()
+  end, opts)
   vim.keymap.set("n", ">", function()
     local ok, err = state.seek(5)
     if not ok then
@@ -603,6 +606,28 @@ function M.toggle(state_snapshot)
   else
     M.open(state_snapshot)
   end
+end
+
+--- Force a complete redraw: nuke all cached image/accent state and re-render.
+--- Useful when artwork gets stuck or the panel display is out of sync.
+function M.force_redraw()
+  if not is_valid_window() then
+    return
+  end
+
+  -- Nuke all cached rendering state
+  render_seq = render_seq + 1
+  clear_current_image()
+  last_artwork_path = nil
+  last_image_key = nil
+  last_accent_artwork = nil
+
+  -- Clear any accent highlights so they re-extract fresh
+  colors.clear_accent(win)
+
+  -- Force a full state refresh then re-render
+  local snapshot = state.refresh() or state.current or { status = "inactive" }
+  render(snapshot)
 end
 
 -- Internal drag handlers, exposed on the module table so that

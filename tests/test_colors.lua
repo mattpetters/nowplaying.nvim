@@ -185,6 +185,38 @@ T["pick_accent"]["accepts single viable color"] = function()
   MiniTest.expect.equality(result, "#e84393")
 end
 
+-- ── desaturate ─────────────────────────────────────────────────
+
+T["desaturate"] = MiniTest.new_set()
+
+T["desaturate"]["reduces saturation by given fraction"] = function()
+  -- Pure red (H=0, S=1, L=0.5) desaturated by 0.5 → S=0.5
+  local hex = child.lua_get([[colors.desaturate("#ff0000", 0.5)]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], hex))
+  -- S=0.5, L=0.5 → R~191, G~64, B~64
+  MiniTest.expect.equality(rgb[1] > rgb[2], true) -- red channel still dominant
+  MiniTest.expect.equality(rgb[2], rgb[3])         -- green == blue (symmetric)
+  MiniTest.expect.equality(rgb[2] > 50, true)      -- not fully saturated anymore
+end
+
+T["desaturate"]["amount=0 keeps color unchanged"] = function()
+  local hex = child.lua_get([[colors.desaturate("#2d9fda", 0)]])
+  MiniTest.expect.equality(hex, "#2d9fda")
+end
+
+T["desaturate"]["amount=1 fully desaturates to gray"] = function()
+  local hex = child.lua_get([[colors.desaturate("#ff0000", 1)]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], hex))
+  -- Fully desaturated red at L=0.5 → mid gray
+  MiniTest.expect.equality(rgb[1], rgb[2])
+  MiniTest.expect.equality(rgb[2], rgb[3])
+end
+
+T["desaturate"]["returns input for invalid hex"] = function()
+  local hex = child.lua_get([[colors.desaturate("not-a-color", 0.5)]])
+  MiniTest.expect.equality(hex, "not-a-color")
+end
+
 -- ── hsl_to_rgb ─────────────────────────────────────────────────
 
 T["hsl_to_rgb"] = MiniTest.new_set()
