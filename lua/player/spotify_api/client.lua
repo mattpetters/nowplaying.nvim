@@ -153,81 +153,89 @@ function M.search(query, callback)
       -- Parse tracks
       if data.tracks and data.tracks.items then
         for _, item in ipairs(data.tracks.items) do
-          local artists = {}
-          for _, a in ipairs(item.artists or {}) do
-            table.insert(artists, a.name)
+          if type(item) == "table" and item.id then
+            local artists = {}
+            for _, a in ipairs(item.artists or {}) do
+              if type(a) == "table" then table.insert(artists, a.name) end
+            end
+            table.insert(results.tracks, {
+              type = "track",
+              id = item.id,
+              uri = item.uri,
+              name = item.name,
+              artist = table.concat(artists, ", "),
+              album = item.album and item.album.name or "",
+              duration_ms = item.duration_ms,
+              popularity = item.popularity,
+              album_id = item.album and item.album.id,
+              image_url = item.album and item.album.images and item.album.images[1] and item.album.images[1].url,
+            })
           end
-          table.insert(results.tracks, {
-            type = "track",
-            id = item.id,
-            uri = item.uri,
-            name = item.name,
-            artist = table.concat(artists, ", "),
-            album = item.album and item.album.name or "",
-            duration_ms = item.duration_ms,
-            popularity = item.popularity,
-            album_id = item.album and item.album.id,
-            image_url = item.album and item.album.images and item.album.images[1] and item.album.images[1].url,
-          })
         end
       end
 
       -- Parse albums
       if data.albums and data.albums.items then
         for _, item in ipairs(data.albums.items) do
-          local artists = {}
-          for _, a in ipairs(item.artists or {}) do
-            table.insert(artists, a.name)
+          if type(item) == "table" and item.id then
+            local artists = {}
+            for _, a in ipairs(item.artists or {}) do
+              if type(a) == "table" then table.insert(artists, a.name) end
+            end
+            table.insert(results.albums, {
+              type = "album",
+              id = item.id,
+              uri = item.uri,
+              name = item.name,
+              artist = table.concat(artists, ", "),
+              total_tracks = item.total_tracks,
+              release_date = item.release_date,
+              image_url = item.images and item.images[1] and item.images[1].url,
+            })
           end
-          table.insert(results.albums, {
-            type = "album",
-            id = item.id,
-            uri = item.uri,
-            name = item.name,
-            artist = table.concat(artists, ", "),
-            total_tracks = item.total_tracks,
-            release_date = item.release_date,
-            image_url = item.images and item.images[1] and item.images[1].url,
-          })
         end
       end
 
       -- Parse artists
       if data.artists and data.artists.items then
         for _, item in ipairs(data.artists.items) do
-          local genres = {}
-          for i, g in ipairs(item.genres or {}) do
-            if i <= 3 then
-              table.insert(genres, g)
+          if type(item) == "table" and item.id then
+            local genres = {}
+            for i, g in ipairs(item.genres or {}) do
+              if i <= 3 then
+                if type(g) == "string" then table.insert(genres, g) end
+              end
             end
+            table.insert(results.artists, {
+              type = "artist",
+              id = item.id,
+              uri = item.uri,
+              name = item.name,
+              genres = table.concat(genres, ", "),
+              followers = item.followers and item.followers.total or 0,
+              popularity = item.popularity,
+              image_url = item.images and item.images[1] and item.images[1].url,
+            })
           end
-          table.insert(results.artists, {
-            type = "artist",
-            id = item.id,
-            uri = item.uri,
-            name = item.name,
-            genres = table.concat(genres, ", "),
-            followers = item.followers and item.followers.total or 0,
-            popularity = item.popularity,
-            image_url = item.images and item.images[1] and item.images[1].url,
-          })
         end
       end
 
       -- Parse playlists
       if data.playlists and data.playlists.items then
         for _, item in ipairs(data.playlists.items) do
-          table.insert(results.playlists, {
-            type = "playlist",
-            id = item.id,
-            uri = item.uri,
-            name = item.name,
-            owner = item.owner and item.owner.display_name or "",
-            description = item.description or "",
-            total_tracks = item.tracks and item.tracks.total or 0,
-            is_public = item.public,
-            image_url = item.images and item.images[1] and item.images[1].url,
-          })
+          if type(item) == "table" and item.id then
+            table.insert(results.playlists, {
+              type = "playlist",
+              id = item.id,
+              uri = item.uri,
+              name = item.name,
+              owner = item.owner and item.owner.display_name or "",
+              description = item.description or "",
+              total_tracks = item.tracks and item.tracks.total or 0,
+              is_public = item.public,
+              image_url = item.images and item.images[1] and item.images[1].url,
+            })
+          end
         end
       end
 
