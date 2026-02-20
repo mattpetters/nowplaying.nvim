@@ -111,12 +111,12 @@ end
 -- Search
 -- --------------------------------------------------------------------------
 
---- Search Spotify for tracks, albums, and artists
+--- Search Spotify for tracks, albums, artists, and playlists
 --- @param query string The search query
---- @param callback function(results, err) where results = { tracks={}, albums={}, artists={} }
+--- @param callback function(results, err) where results = { tracks={}, albums={}, artists={}, playlists={} }
 function M.search(query, callback)
   if not query or query == "" then
-    callback({ tracks = {}, albums = {}, artists = {} })
+    callback({ tracks = {}, albums = {}, artists = {}, playlists = {} })
     return
   end
 
@@ -126,7 +126,7 @@ function M.search(query, callback)
 
   local params = {
     q = query,
-    type = "track,album,artist",
+    type = "track,album,artist,playlist",
     limit = limit,
   }
 
@@ -147,6 +147,7 @@ function M.search(query, callback)
         tracks = {},
         albums = {},
         artists = {},
+        playlists = {},
       }
 
       -- Parse tracks
@@ -208,6 +209,23 @@ function M.search(query, callback)
             genres = table.concat(genres, ", "),
             followers = item.followers and item.followers.total or 0,
             popularity = item.popularity,
+            image_url = item.images and item.images[1] and item.images[1].url,
+          })
+        end
+      end
+
+      -- Parse playlists
+      if data.playlists and data.playlists.items then
+        for _, item in ipairs(data.playlists.items) do
+          table.insert(results.playlists, {
+            type = "playlist",
+            id = item.id,
+            uri = item.uri,
+            name = item.name,
+            owner = item.owner and item.owner.display_name or "",
+            description = item.description or "",
+            total_tracks = item.tracks and item.tracks.total or 0,
+            is_public = item.public,
             image_url = item.images and item.images[1] and item.images[1].url,
           })
         end
@@ -337,6 +355,45 @@ function M.artist_top_tracks(artist_id, callback)
           popularity = item.popularity,
           image_url = item.album and item.album.images and item.album.images[1] and item.album.images[1].url,
         })
+      end
+
+      callback(tracks)
+    end,
+  })
+end
+
+--- Get tracks for a playlist
+--- @param playlist_id string Spotify playlist ID
+--- @param callback function(tracks, err)
+function M.playlist_tracks(playlist_id, callback)
+  api_request("GET", "/playlists/" .. playlist_id .. "/tracks", {
+    params = { limit = 50, fields = "items(track(id,uri,name,artists,album,duration_ms,popularity))" },
+    callback = function(data, err)
+      if not data then
+        callback(nil, err)
+        return
+      end
+
+      local tracks = {}
+      for _, item in ipairs(data.items or {}) do
+        local t = item.track
+        if t and t.id then
+          local artists = {}
+          for _, a in ipairs(t.artists or {}) do
+            table.insert(artists, a.name)
+          end
+          table.insert(tracks, {
+            type = "track",
+            id = t.id,
+            uri = t.uri,
+            name = t.name,
+            artist = table.concat(artists, ", "),
+            album = t.album and t.album.name or "",
+            duration_ms = t.duration_ms,
+            popularity = t.popularity,
+            image_url = t.album and t.album.images and t.album.images[1] and t.album.images[1].url,
+          })
+        end
       end
 
       callback(tracks)
