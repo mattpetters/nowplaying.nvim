@@ -71,6 +71,7 @@ local function setup_keymaps()
     { key = "seek_backward", suffix = maps.seek_backward, cmd = "NowPlayingSeekBackward", desc = "NowPlaying: seek backward" },
     { key = "refresh", suffix = maps.refresh, cmd = "NowPlayingRefresh", desc = "NowPlaying: refresh" },
     { key = "notify", suffix = maps.notify, cmd = "NowPlayingNotify", desc = "NowPlaying: notify" },
+    { key = "search", suffix = maps.search, cmd = "NowPlayingSearch", desc = "NowPlaying: Spotify search" },
   }
 
   local seen = {}
@@ -159,6 +160,22 @@ function M.setup()
       return state.seek(-5)
     end)
   end, { desc = "Seek backward 5 seconds" })
+
+  create_cmd("NowPlayingSearch", function()
+    local search = require("player.telescope.search")
+    search.open()
+  end, { desc = "Search Spotify via Telescope" })
+
+  create_cmd("NowPlayingSpotifyAuth", function()
+    local auth = require("player.spotify_api.auth")
+    auth.login()
+  end, { desc = "Authenticate with Spotify (PKCE OAuth)" })
+
+  create_cmd("NowPlayingSpotifyLogout", function()
+    local auth = require("player.spotify_api.auth")
+    auth.logout()
+    vim.notify("Spotify logged out", vim.log.levels.INFO, { title = "NowPlaying.nvim" })
+  end, { desc = "Clear Spotify authentication tokens" })
 
   setup_keymaps()
 

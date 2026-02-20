@@ -50,6 +50,7 @@ local defaults = {
       seek_backward = "h",
       refresh = "r",
       notify = "i",
+      search = "s",
     },
   },
   panel = {
@@ -76,6 +77,18 @@ local defaults = {
         width = 20,
         height = 10,
       },
+    },
+  },
+  spotify = {
+    client_id = nil, -- uses baked-in default; override to use your own Spotify app
+    search = {
+      debounce_ms = 300,
+      limit = 7,     -- results per type (track/album/artist)
+      market = nil,  -- ISO 3166-1 alpha-2 country code, e.g. "US"
+    },
+    actions = {
+      default = "play",    -- "play" or "queue"
+      secondary = "queue", -- bound to <C-q> in picker
     },
   },
   log_level = "warn",
