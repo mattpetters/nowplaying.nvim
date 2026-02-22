@@ -12,6 +12,7 @@
     <a href="https://github.com/Ferouk/nowplaying.nvim/graphs/contributors">
       <img src="https://img.shields.io/github/contributors/Ferouk/nowplaying.nvim?label=Contributors&style=for-the-badge&color=9ad39e" alt="GitHub contributors" height="28px" />
     </a>
+    <img src="./assets/coverage-badge.svg" alt="Coverage" height="28px" />
   </p>
   <p>Lightweight Neovim plugin that shows what's playing in Apple Music or Spotify on macOS, with controls, notifications, floating panel, and artwork rendering.</p>
   

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - name: Install Lua 5.1 and luarocks
+        run: |
+          brew install lua@5.1 luarocks
+          echo "$(brew --prefix lua@5.1)/bin" >> $GITHUB_PATH
+
+      - name: Install luacov
+        run: |
+          luarocks --lua-version=5.1 install luacov
+          luarocks --lua-version=5.1 install luacov-reporter-lcov
+
+      - name: Bootstrap test dependencies
+        run: make deps
+
+      - name: Run tests
+        run: make test
+
+      - name: Run tests with coverage
+        run: make coverage
+
+      - name: Upload coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/coverage-badge.svg
+          # Only commit if badge changed
+          if git diff --cached --quiet; then
+            echo "Coverage badge unchanged, skipping commit."
+          else
+            git commit -m "ci: update coverage badge [skip ci]"
+            git push
+          fi

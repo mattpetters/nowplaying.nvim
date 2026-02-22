@@ -565,4 +565,241 @@ T["code_quality"]["panel.lua has no deprecated option calls"] = function()
   MiniTest.expect.equality(has_deprecated, false)
 end
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- Responsive layout / redraw / resize behavior (TDD)
+--
+-- NOTE: These tests are intentionally written ahead of the panel refactor to
+-- use the new responsive layout helpers in player.ui.panel_utils. They should
+-- NOT error, but some assertions may fail until panel rendering is updated.
+-- ════════════════════════════════════════════════════════════════════════════
+
+local function resize_panel_win(win_id, new_width, new_height)
+  child.lua(string.format(
+    [[
+      local win = %d
+      local cfg = vim.api.nvim_win_get_config(win)
+      vim.api.nvim_win_set_config(win, {
+        relative = "editor",
+        width = %d,
+        height = %d,
+        row = cfg.row,
+        col = cfg.col,
+      })
+    ]],
+    win_id,
+    new_width,
+    new_height
+  ))
+end
+
+local function get_panel_text(win_id)
+  local lines = child.lua_get(string.format(
+    [[
+      (function()
+        local b = vim.api.nvim_win_get_buf(%d)
+        return vim.api.nvim_buf_get_lines(b, 0, -1, false)
+      end)()
+    ]],
+    win_id
+  ))
+  return table.concat(lines, "\n")
+end
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- responsive_layout
+-- ════════════════════════════════════════════════════════════════════════════
+
+T["responsive_layout"] = MiniTest.new_set()
+
+T["responsive_layout"]["large panel shows controls and album"] = function()
+  local snapshot = H.make_state({
+    status = "playing",
+    track = {
+      title = "BigTrack",
+      artist = "BigArtist",
+      album = "BigAlbum",
+      duration = 200,
+    },
+    position = 50,
+  })
+
+  local win_id = open_panel()
+  -- Ensure the panel is rendering the intended state
+  H.set_state(child, snapshot)
+
+  resize_panel_win(win_id, 60, 16) -- large breakpoint
+  child.lua([[require("player.ui.panel").update()]])
+
+  local text = get_panel_text(win_id)
+  local has_controls = (text:find("⏮", 1, true) ~= nil) or (text:find("⏭", 1, true) ~= nil)
+  MiniTest.expect.equality(has_controls, true)
+  MiniTest.expect.equality(text:find("BigAlbum", 1, true) ~= nil, true)
+end
+
+T["responsive_layout"]["small panel hides controls"] = function()
+  local snapshot = H.make_state({
+    status = "playing",
+    track = {
+      title = "SmallTrack",
+      artist = "SmallArtist",
+      album = "SmallAlbum",
+      duration = 200,
+    },
+    position = 50,
+  })
+
+  local win_id = open_panel()
+  H.set_state(child, snapshot)
+
+  resize_panel_win(win_id, 32, 9) -- small breakpoint
+  child.lua([[require("player.ui.panel").update()]])
+
+  local text = get_panel_text(win_id)
+  MiniTest.expect.equality(text:find("⏮", 1, true) == nil, true)
+  MiniTest.expect.equality(text:find("SmallTrack", 1, true) ~= nil, true)
+end
+
+T["responsive_layout"]["tiny panel shows only title and artist"] = function()
+  local snapshot = H.make_state({
+    status = "playing",
+    track = {
+      title = "TinyTrack",
+      artist = "TinyArtist",
+      album = "TinyAlbum",
+      duration = 200,
+    },
+    position = 50,
+  })
+
+  local win_id = open_panel()
+  H.set_state(child, snapshot)
+
+  resize_panel_win(win_id, 25, 6) -- tiny breakpoint
+  child.lua([[require("player.ui.panel").update()]])
+
+  local text = get_panel_text(win_id)
+  MiniTest.expect.equality(text:find("TinyTrack", 1, true) ~= nil, true)
+  MiniTest.expect.equality(text:find("TinyArtist", 1, true) ~= nil, true)
+  MiniTest.expect.equality(text:find("TinyAlbum", 1, true) == nil, true)
+  MiniTest.expect.equality(text:find("█", 1, true) == nil, true)
+  MiniTest.expect.equality(text:find("░", 1, true) == nil, true)
+end
+
+T["responsive_layout"]["medium panel hides key hints but shows control icons"] = function()
+  local snapshot = H.make_state({
+    status = "playing",
+    track = {
+      title = "MedTrack",
+      artist = "MedArtist",
+      album = "MedAlbum",
+      duration = 200,
+    },
+    position = 50,
+  })
+
+  local win_id = open_panel()
+  H.set_state(child, snapshot)
+
+  resize_panel_win(win_id, 45, 12) -- medium breakpoint
+  child.lua([[require("player.ui.panel").update()]])
+
+  local text = get_panel_text(win_id)
+  MiniTest.expect.equality(text:find("⏮", 1, true) ~= nil, true)
+  MiniTest.expect.equality(text:find("[b]", 1, true) == nil, true)
+  MiniTest.expect.equality(text:find("[p]", 1, true) == nil, true)
+end
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- force_redraw
+-- ════════════════════════════════════════════════════════════════════════════
+
+T["force_redraw"] = MiniTest.new_set()
+
+T["force_redraw"]["force_redraw re-renders with fresh state"] = function()
+  -- Open panel with inactive state
+  child.lua([[
+    require("player.state").current = { status = "inactive" }
+    require("player.ui.panel").open()
+  ]])
+  local win_id = H.get_panel_win(child)
+
+  -- Set state to playing and force redraw
+  H.set_state(child, H.make_state({
+    status = "playing",
+    track = { title = "FreshTrack", artist = "FreshArtist", album = "FreshAlbum", duration = 200 },
+    position = 10,
+  }))
+
+  local ok = child.lua_get([[
+    (function()
+      local panel = require("player.ui.panel")
+      if type(panel.force_redraw) ~= "function" then return false end
+      return pcall(panel.force_redraw)
+    end)()
+  ]])
+  MiniTest.expect.equality(ok, true)
+
+  local text = get_panel_text(win_id)
+  MiniTest.expect.equality(text:find("FreshTrack", 1, true) ~= nil, true)
+end
+
+T["force_redraw"]["force_redraw does nothing when panel is closed"] = function()
+  -- Ensure panel is closed
+  child.lua([[pcall(function() require("player.ui.panel").close() end)]])
+
+  local ok = child.lua_get([[
+    (function()
+      local panel = require("player.ui.panel")
+      if type(panel.force_redraw) ~= "function" then return false end
+      return pcall(panel.force_redraw)
+    end)()
+  ]])
+  MiniTest.expect.equality(ok, true)
+  MiniTest.expect.equality(float_count(), 0)
+end
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- resize_behavior
+-- ════════════════════════════════════════════════════════════════════════════
+
+T["resize_behavior"] = MiniTest.new_set()
+
+T["resize_behavior"]["panel respects min_width during resize"] = function()
+  local win_id = open_panel()
+  -- Try to resize window to something unrealistically small
+  resize_panel_win(win_id, 10, 8)
+
+  local ok = child.lua_get([[
+    (function()
+      local panel = require("player.ui.panel")
+      return pcall(panel.update)
+    end)()
+  ]])
+  -- Should remain functional (no errors); may still fail assertions elsewhere.
+  MiniTest.expect.equality(ok, true)
+  MiniTest.expect.equality(float_count(), 1)
+end
+
+T["resize_behavior"]["update adjusts height when content changes"] = function()
+  -- Open with inactive state (minimal content)
+  child.lua([[
+    require("player.state").current = { status = "inactive" }
+    require("player.ui.panel").open()
+  ]])
+  local win_id = H.get_panel_win(child)
+
+  local h_before = child.lua_get(string.format([[vim.api.nvim_win_get_config(%d).height]], win_id))
+
+  -- Update with active/playing state which should require more lines
+  H.set_state(child, H.make_state({
+    status = "playing",
+    track = { title = "TallTrack", artist = "TallArtist", album = "TallAlbum", duration = 200 },
+    position = 50,
+  }))
+  child.lua([[require("player.ui.panel").update()]])
+
+  local h_after = child.lua_get(string.format([[vim.api.nvim_win_get_config(%d).height]], win_id))
+  MiniTest.expect.equality(h_after > h_before, true)
+end
+
 return T

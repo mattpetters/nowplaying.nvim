@@ -1,0 +1,25 @@
+-- luacov configuration for nowplaying.nvim
+return {
+  statsfile = "luacov.stats.out",
+  reportfile = "luacov.report.out",
+
+  -- Only track coverage for our plugin modules
+  include = {
+    "player/",
+    "player%.init$",
+  },
+
+  -- Exclude test files and dependencies
+  exclude = {
+    "tests/",
+    "scripts/",
+    "deps/",
+    "mini%.",
+    "telescope%.",
+    "image%.",
+    "luacov",
+  },
+
+  -- Use lcov reporter for badge generation
+  reporter = "lcov",
+}

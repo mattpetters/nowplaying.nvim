@@ -477,7 +477,7 @@ end
 --- @param callback function(tracks, err)
 function M.playlist_tracks(playlist_id, callback)
   api_request("GET", "/playlists/" .. playlist_id .. "/tracks", {
-    params = { limit = 50, fields = "items(track(id,uri,name,artists,album,duration_ms,popularity))" },
+    params = { limit = 50, fields = "items(track(id,uri,name,artists,album(id,name,images),duration_ms,popularity))" },
     callback = function(data, err)
       if not data then
         callback(nil, err)

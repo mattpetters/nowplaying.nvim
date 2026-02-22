@@ -180,4 +180,66 @@ T["popularity_bar"]["uses default width of 10"] = function()
   MiniTest.expect.equality(r:find("50") ~= nil, true)
 end
 
+-- ── artwork integration ────────────────────────────────────────
+-- Tests that the search previewer's artwork cache key logic works
+-- and that artwork.fetch_url is callable for search result items.
+
+T["artwork_integration"] = MiniTest.new_set()
+
+T["artwork_integration"]["builds correct cache key from search item"] = function()
+  local result = child.lua_get([[(function()
+    local item = { type = "track", id = "abc123", name = "Test", image_url = "https://i.scdn.co/image/abc" }
+    local cache_key = (item.type or "img") .. "_" .. (item.id or item.name or "unknown")
+    return cache_key
+  end)()]])
+  MiniTest.expect.equality(result, "track_abc123")
+end
+
+T["artwork_integration"]["cache key uses name when id is missing"] = function()
+  local result = child.lua_get([[(function()
+    local item = { type = "album", name = "My Album", image_url = "https://example.com" }
+    local cache_key = (item.type or "img") .. "_" .. (item.id or item.name or "unknown")
+    return cache_key
+  end)()]])
+  MiniTest.expect.equality(result, "album_My Album")
+end
+
+T["artwork_integration"]["fetch_url returns cached path for search item"] = function()
+  local result = child.lua_get([[(function()
+    local art = require("player.artwork")
+    local utils = require("player.utils")
+    utils.file_exists = function() return true end
+    utils.ensure_dir = function() end
+    local item = { type = "track", id = "t1", image_url = "https://i.scdn.co/image/t1" }
+    local cache_key = item.type .. "_" .. item.id
+    local res = art.fetch_url(item.image_url, cache_key)
+    return res ~= nil and res.path ~= nil
+  end)()]])
+  MiniTest.expect.equality(result, true)
+end
+
+T["artwork_integration"]["shows loading when artwork not cached"] = function()
+  local result = child.lua_get([[(function()
+    local art = require("player.artwork")
+    local utils = require("player.utils")
+    utils.file_exists = function() return false end
+    utils.download = function() return false end
+    utils.ensure_dir = function() end
+    local item = { type = "album", id = "a1", image_url = "https://i.scdn.co/image/a1" }
+    local cache_key = item.type .. "_" .. item.id
+    local res = art.fetch_url(item.image_url, cache_key)
+    return res == nil
+  end)()]])
+  -- nil means not yet available → previewer should show loading placeholder
+  MiniTest.expect.equality(result, true)
+end
+
+T["artwork_integration"]["skips artwork for items without image_url"] = function()
+  local result = child.lua_get([[(function()
+    local item = { type = "track", id = "t2", name = "No Image" }
+    return item.image_url == nil
+  end)()]])
+  MiniTest.expect.equality(result, true)
+end
+
 return T

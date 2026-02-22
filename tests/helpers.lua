@@ -5,6 +5,9 @@ local H = {}
 -- Project root (one level up from tests/)
 H.project_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 
+-- Counter for unique child luacov stats filenames
+local child_counter = 0
+
 --- Create and start a child Neovim process with the plugin on rtp
 ---@return table child  MiniTest child neovim handle
 function H.new_child()
@@ -12,6 +15,36 @@ function H.new_child()
   child.start({ "-u", "NONE" })
   -- Add project root to runtimepath so require("player.*") works
   child.lua(string.format([[vim.opt.rtp:prepend(%q)]], H.project_root))
+
+  -- Inject luacov into the child process when COVERAGE=1
+  if os.getenv("COVERAGE") == "1" then
+    child_counter = child_counter + 1
+    child.lua(string.format([[
+      local home = os.getenv("HOME") or ""
+      package.path = home .. "/.luarocks/share/lua/5.1/?.lua;"
+                  .. home .. "/.luarocks/share/lua/5.1/?/init.lua;"
+                  .. package.path
+      local ok, luacov = pcall(require, "luacov.runner")
+      if ok then
+        luacov.init({
+          statsfile = %q,
+          include = { "player/" },
+          exclude = { "tests/", "scripts/", "deps/", "mini%%.", "telescope%%.", "image%%." },
+        })
+      end
+    ]], H.project_root .. "/luacov.stats.child." .. child_counter .. ".out"))
+
+    -- Wrap child.stop to flush luacov stats before killing the process
+    local orig_stop = child.stop
+    child.stop = function(...)
+      pcall(child.lua, [[
+        local ok, luacov = pcall(require, "luacov.runner")
+        if ok and luacov.save_stats then luacov.save_stats() end
+      ]])
+      return orig_stop(...)
+    end
+  end
+
   return child
 end
 

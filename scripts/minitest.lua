@@ -22,11 +22,29 @@ end
 vim.opt.rtp:prepend(mini_path)
 vim.opt.rtp:prepend(project_root)
 
+-- Add luarocks paths for luacov
+local home = os.getenv("HOME") or ""
+local luarocks_share = home .. "/.luarocks/share/lua/5.1/?.lua"
+local luarocks_share_init = home .. "/.luarocks/share/lua/5.1/?/init.lua"
+package.path = luarocks_share .. ";" .. luarocks_share_init .. ";" .. package.path
+
 -- Disable swap/backup/undo for clean test runs
 vim.o.swapfile = false
 vim.o.backup = false
 vim.o.writebackup = false
 vim.o.undofile = false
+
+-- Enable luacov if COVERAGE=1 is set (via environment variable)
+if os.getenv("COVERAGE") == "1" then
+  local ok, luacov = pcall(require, "luacov.runner")
+  if ok then
+    luacov.init({
+      statsfile = project_root .. "/luacov.stats.out",
+      include = { "player/" },
+      exclude = { "tests/", "scripts/", "deps/", "mini%.", "telescope%.", "image%." },
+    })
+  end
+end
 
 -- Set up mini.test with stdout reporter for CI / headless use
 require("mini.test").setup({

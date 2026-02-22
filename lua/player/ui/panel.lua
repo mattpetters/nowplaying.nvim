@@ -131,33 +131,34 @@ local format_time = panel_utils.format_time
 local progress_bar = panel_utils.progress_bar
 
 local function compute_content_height(state_snapshot)
-  local panel_cfg = config.get().panel
-  local elements = panel_cfg.elements or {}
-  local artwork_cfg = elements.artwork or {}
-
   if not state_snapshot or state_snapshot.status == "inactive" then
     return 2
   end
 
-  local art_h = artwork_cfg.enabled and (artwork_cfg.height or 6) or 4
+  local panel_cfg = config.get().panel
+  local width = panel_cfg.width or 60
+  local layout = panel_utils.compute_layout(width, 30) -- use generous height to compute natural height
+  local elems = layout.elements
+
+  local art_h = elems.artwork and layout.artwork.height or 0
   local meta_rows = 0
-  if elements.track_title then
+  if elems.track_title then
     meta_rows = meta_rows + 1
   end
-  if elements.artist then
+  if elems.artist then
     meta_rows = meta_rows + 1
   end
-  if elements.album then
+  if elems.album then
     meta_rows = meta_rows + 1
   end
   meta_rows = math.max(meta_rows, 2)
 
-  local height = 2 + math.max(art_h, meta_rows) -- header + spacer + content block
-  if elements.progress_bar then
-    height = height + 2 -- one spacer row + bar row
-  end
-  if elements.controls then
+  local height = 1 + math.max(art_h, meta_rows) -- header + content block
+  if elems.progress_bar then
     height = height + 2
+  end
+  if elems.controls then
+    height = height + (elems.key_hints and 2 or 1)
   end
 
   return math.max(height, 3)
@@ -223,6 +224,10 @@ local function render(state_snapshot)
     local track = state_snapshot.track or {}
     local status_icon = state_snapshot.status == "playing" and "▶" or "⏸"
     local player_label = state_snapshot.player_label or require("player.utils").format_provider(state_snapshot.player)
+
+    local panel_height = current_height or 16
+    local layout = panel_utils.compute_layout(panel_width, panel_height)
+    local vis = layout.elements
     local title_line = string.format(
       "nowplaying  │  %s %s",
       player_label,
@@ -230,28 +235,27 @@ local function render(state_snapshot)
     )
     table.insert(lines, center_text(title_line, panel_width))
 
-    local cfg = panel_elements.artwork or {}
-    local art_w = cfg.enabled and (cfg.width or 10) or 0
-    local art_h = cfg.enabled and (cfg.height or 6) or 4
+    local art_w = vis.artwork and layout.artwork.width or 0
+    local art_h = vis.artwork and layout.artwork.height or 0
     local left_pad = 2
-    local gap = cfg.enabled and 2 or 0
-    local right_w = math.max(panel_width - left_pad - art_w - gap - 2, 18)
+    local gap = art_w > 0 and 2 or 0
+    local right_w = math.max(panel_width - left_pad - art_w - gap - 2, 15)
 
     local meta_lines = {}
-    if panel_elements.track_title then
+    if vis.track_title then
       table.insert(meta_lines, truncate_text(track.title or "Unknown", right_w))
     end
-    if panel_elements.artist then
+    if vis.artist then
       table.insert(meta_lines, truncate_text(track.artist or "Unknown", right_w))
     end
-    if panel_elements.album then
+    if vis.album then
       table.insert(meta_lines, truncate_text(track.album or "Unknown", right_w))
     end
     if #meta_lines == 0 then
       table.insert(meta_lines, "No track metadata")
     end
 
-    local block_h = math.max(art_h, #meta_lines)
+    local block_h = art_w > 0 and math.max(art_h, #meta_lines) or #meta_lines
     local meta_start = math.max(1, math.floor((block_h - #meta_lines) / 2) + 1)
 
     for row_idx = 1, block_h do
@@ -263,7 +267,7 @@ local function render(state_snapshot)
       table.insert(lines, pad_or_truncate(line, panel_width))
     end
 
-    if cfg.enabled and state_snapshot.artwork and state_snapshot.artwork.path then
+    if vis.artwork and state_snapshot.artwork and state_snapshot.artwork.path then
       try_render_image(state_snapshot.artwork.path)
     else
       render_seq = render_seq + 1
@@ -297,7 +301,7 @@ local function render(state_snapshot)
       end
     end
 
-    if panel_elements.progress_bar then
+    if vis.progress_bar then
       table.insert(lines, string.rep(" ", panel_width))
       local pos = format_time(state_snapshot.position)
       local duration = tonumber(track.duration) or 0
@@ -310,13 +314,15 @@ local function render(state_snapshot)
       table.insert(lines, center_text(progress_line, panel_width))
     end
 
-    if panel_elements.controls then
+    if vis.controls then
       local play_icon = state_snapshot.status == "playing" and "⏸" or "▶"
       local cell_w = 8
       local icon_row = center_cell("⏮", cell_w) .. center_cell(play_icon, cell_w) .. center_cell("⏹", cell_w) .. center_cell("⏭", cell_w)
-      local key_row = center_cell("[b]", cell_w) .. center_cell("[p]", cell_w) .. center_cell("[x]", cell_w) .. center_cell("[n]", cell_w)
       table.insert(lines, center_text(icon_row, panel_width))
-      table.insert(lines, center_text(key_row, panel_width))
+      if vis.key_hints then
+        local key_row = center_cell("[b]", cell_w) .. center_cell("[p]", cell_w) .. center_cell("[x]", cell_w) .. center_cell("[n]", cell_w)
+        table.insert(lines, center_text(key_row, panel_width))
+      end
     end
   end
 
@@ -625,8 +631,8 @@ function M.force_redraw()
   -- Clear any accent highlights so they re-extract fresh
   colors.clear_accent(win)
 
-  -- Force a full state refresh then re-render
-  local snapshot = state.refresh() or state.current or { status = "inactive" }
+  -- Re-render with current state (callers can state.refresh() first if needed)
+  local snapshot = state.current or { status = "inactive" }
   render(snapshot)
 end
 

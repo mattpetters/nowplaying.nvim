@@ -292,4 +292,198 @@ T["nearest_corner"]["left edge center maps to bottom-left"] = function()
   MiniTest.expect.equality(c, "bottom_left")
 end
 
+-- ── layout_breakpoint ─────────────────────────────────────────────────────────
+
+T["layout_breakpoint"] = MiniTest.new_set()
+
+T["layout_breakpoint"]["Large: 60x16 → large"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(60, 16)]])
+  MiniTest.expect.equality(bp, "large")
+end
+
+T["layout_breakpoint"]["Medium: 45x12 → medium"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(45, 12)]])
+  MiniTest.expect.equality(bp, "medium")
+end
+
+T["layout_breakpoint"]["Small: 32x9 → small"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(32, 9)]])
+  MiniTest.expect.equality(bp, "small")
+end
+
+T["layout_breakpoint"]["Tiny: 25x6 → tiny"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(25, 6)]])
+  MiniTest.expect.equality(bp, "tiny")
+end
+
+T["layout_breakpoint"]["Edge: exactly 55x14 → large"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(55, 14)]])
+  MiniTest.expect.equality(bp, "large")
+end
+
+T["layout_breakpoint"]["Edge: 54x14 → medium (width just below large)"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(54, 14)]])
+  MiniTest.expect.equality(bp, "medium")
+end
+
+T["layout_breakpoint"]["Edge: 55x13 → medium (height just below large)"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(55, 13)]])
+  MiniTest.expect.equality(bp, "medium")
+end
+
+T["layout_breakpoint"]["Edge: exactly 40x10 → medium"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(40, 10)]])
+  MiniTest.expect.equality(bp, "medium")
+end
+
+T["layout_breakpoint"]["Edge: 39x10 → small"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(39, 10)]])
+  MiniTest.expect.equality(bp, "small")
+end
+
+T["layout_breakpoint"]["Edge: exactly 30x8 → small"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(30, 8)]])
+  MiniTest.expect.equality(bp, "small")
+end
+
+T["layout_breakpoint"]["Edge: 29x8 → tiny"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(29, 8)]])
+  MiniTest.expect.equality(bp, "tiny")
+end
+
+T["layout_breakpoint"]["Very small: 10x3 → tiny"] = function()
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(10, 3)]])
+  MiniTest.expect.equality(bp, "tiny")
+end
+
+-- ── visible_elements ──────────────────────────────────────────────────────────
+
+T["visible_elements"] = MiniTest.new_set()
+
+T["visible_elements"]["Large (60x16): all elements true"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").visible_elements(60, 16)]])
+  MiniTest.expect.equality(r, {
+    artwork = true,
+    track_title = true,
+    artist = true,
+    album = true,
+    progress_bar = true,
+    controls = true,
+    key_hints = true,
+  })
+end
+
+T["visible_elements"]["Medium (45x12): key_hints false, rest true"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").visible_elements(45, 12)]])
+  MiniTest.expect.equality(r, {
+    artwork = true,
+    track_title = true,
+    artist = true,
+    album = true,
+    progress_bar = true,
+    controls = true,
+    key_hints = false,
+  })
+end
+
+T["visible_elements"]["Small (32x9): artwork/album/controls/key_hints false, progress_bar true"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").visible_elements(32, 9)]])
+  MiniTest.expect.equality(r, {
+    artwork = false,
+    track_title = true,
+    artist = true,
+    album = false,
+    progress_bar = true,
+    controls = false,
+    key_hints = false,
+  })
+end
+
+T["visible_elements"]["Tiny (25x6): only track_title and artist true"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").visible_elements(25, 6)]])
+  MiniTest.expect.equality(r, {
+    artwork = false,
+    track_title = true,
+    artist = true,
+    album = false,
+    progress_bar = false,
+    controls = false,
+    key_hints = false,
+  })
+end
+
+-- ── compute_artwork_size ──────────────────────────────────────────────────────
+
+T["compute_artwork_size"] = MiniTest.new_set()
+
+T["compute_artwork_size"]["Large 60x16: correct size"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").compute_artwork_size(60, 16, "large")]])
+  -- width=floor(60*0.35)=21, height=floor(16*0.6)=9
+  MiniTest.expect.equality(r, { width = 21, height = 9 })
+end
+
+T["compute_artwork_size"]["Medium 50x12: correct size"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").compute_artwork_size(50, 12, "medium")]])
+  -- width=floor(50*0.25)=12, height=floor(12*0.5)=6
+  MiniTest.expect.equality(r, { width = 12, height = 6 })
+end
+
+T["compute_artwork_size"]["Small: returns {0,0}"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").compute_artwork_size(32, 9, "small")]])
+  MiniTest.expect.equality(r, { width = 0, height = 0 })
+end
+
+T["compute_artwork_size"]["Tiny: returns {0,0}"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").compute_artwork_size(25, 6, "tiny")]])
+  MiniTest.expect.equality(r, { width = 0, height = 0 })
+end
+
+T["compute_artwork_size"]["Large (100x16): capped at max width 24"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").compute_artwork_size(100, 16, "large")]])
+  MiniTest.expect.equality(r, { width = 24, height = 9 })
+end
+
+T["compute_artwork_size"]["Large (60x30): capped at max height 12"] = function()
+  local r = child.lua_get([[require("player.ui.panel_utils").compute_artwork_size(60, 30, "large")]])
+  MiniTest.expect.equality(r, { width = 21, height = 12 })
+end
+
+-- ── compute_layout ───────────────────────────────────────────────────────────
+
+T["compute_layout"] = MiniTest.new_set()
+
+T["compute_layout"]["breakpoint matches layout_breakpoint"] = function()
+  local layout = child.lua_get([[require("player.ui.panel_utils").compute_layout(60, 16)]])
+  local bp = child.lua_get([[require("player.ui.panel_utils").layout_breakpoint(60, 16)]])
+  MiniTest.expect.equality(layout.breakpoint, bp)
+end
+
+T["compute_layout"]["elements matches visible_elements"] = function()
+  local layout = child.lua_get([[require("player.ui.panel_utils").compute_layout(45, 12)]])
+  local elements = child.lua_get([[require("player.ui.panel_utils").visible_elements(45, 12)]])
+  MiniTest.expect.equality(layout.elements, elements)
+end
+
+T["compute_layout"]["artwork matches compute_artwork_size"] = function()
+  local layout = child.lua_get([[require("player.ui.panel_utils").compute_layout(50, 12)]])
+  local expected = child.lua_get([[require("player.ui.panel_utils").compute_artwork_size(50, 12, "medium")]])
+  MiniTest.expect.equality(layout.artwork, expected)
+end
+
+T["compute_layout"]["meta_right_width calculation for large layout"] = function()
+  local layout = child.lua_get([[require("player.ui.panel_utils").compute_layout(60, 16)]])
+  -- artwork.width = 21; meta_right_width = max(60 - 21 - 6, 15) = 33
+  MiniTest.expect.equality(layout.meta_right_width, 33)
+end
+
+T["compute_layout"]["meta_right_width minimum is 15"] = function()
+  local layout = child.lua_get([[require("player.ui.panel_utils").compute_layout(20, 5)]])
+  MiniTest.expect.equality(layout.meta_right_width, 15)
+end
+
+T["compute_layout"]["controls_width calculation"] = function()
+  local layout = child.lua_get([[require("player.ui.panel_utils").compute_layout(60, 16)]])
+  MiniTest.expect.equality(layout.controls_width, 56)
+end
+
 return T

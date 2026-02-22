@@ -2,6 +2,7 @@ local client = require("player.spotify_api.client")
 local auth = require("player.spotify_api.auth")
 local config = require("player.config")
 local log = require("player.log")
+local artwork = require("player.artwork")
 
 local M = {}
 
@@ -130,11 +131,70 @@ local function get_entry_maker()
 end
 
 -- --------------------------------------------------------------------------
--- Card-style previewer
+-- Card-style previewer with image.nvim artwork rendering
 -- --------------------------------------------------------------------------
+
+--- Try to detect if image.nvim is available
+---@return table|nil  image.nvim module or nil
+local function get_image_nvim()
+  local ok, image_nvim = pcall(require, "image")
+  if ok and image_nvim then
+    return image_nvim
+  end
+  return nil
+end
+
+--- Clear a previously rendered image object safely
+---@param img table|nil  image.nvim image object
+local function clear_image(img)
+  if img then
+    pcall(function() img:clear() end)
+  end
+end
+
+--- Render artwork into the Telescope preview window via image.nvim.
+--- Falls back to showing the file path if image.nvim is not available.
+---@param image_nvim table  image.nvim module
+---@param artwork_path string  local file path to the image
+---@param preview_win number  window handle for the preview pane
+---@param preview_buf number  buffer handle for the preview pane
+---@param y_offset number  line offset in the preview buffer for the image
+---@return table|nil  image object (for later cleanup), or nil
+local function render_preview_image(image_nvim, artwork_path, preview_win, preview_buf, y_offset)
+  if not image_nvim then return nil end
+  if not preview_win or not vim.api.nvim_win_is_valid(preview_win) then return nil end
+  if not preview_buf or not vim.api.nvim_buf_is_valid(preview_buf) then return nil end
+
+  local utils = require("player.utils")
+  if not utils.file_exists(artwork_path) then return nil end
+
+  local preview_width = vim.api.nvim_win_get_width(preview_win)
+  -- Size the image to roughly half the preview pane width, max 20 cols
+  local img_width = math.min(math.floor(preview_width * 0.5), 20)
+  local img_height = math.min(math.floor(img_width * 0.5), 10)
+
+  local img = image_nvim.from_file(artwork_path, {
+    window = preview_win,
+    buffer = preview_buf,
+    inline = false,
+    x = 2,
+    y = y_offset,
+    width = img_width,
+    height = img_height,
+  })
+
+  if img then
+    img:render()
+    return img
+  end
+  return nil
+end
 
 local function make_previewer()
   local previewers = require("telescope.previewers")
+
+  -- Track the current image object so we can clear it between entries
+  local current_preview_image = nil
 
   return previewers.new_buffer_previewer({
     title = "Details",
@@ -142,9 +202,14 @@ local function make_previewer()
       local item = entry.value
       if not item then return end
 
+      -- Clear any previous artwork image
+      clear_image(current_preview_image)
+      current_preview_image = nil
+
       local bufnr = self.state.bufnr
       local lines = {}
       local highlights = {} -- { {line_0idx, col_start, col_end, hl_group} }
+      local artwork_line_idx = nil -- line index where artwork placeholder sits (0-based)
 
       local function add(text, hl)
         table.insert(lines, text)
@@ -170,6 +235,77 @@ local function make_previewer()
       add("  " .. type_icon .. "  " .. type_label, "NowPlayingPreviewHeader")
       add("  " .. string.rep("\u{2500}", 40), "NowPlayingPreviewBorder")
       add("")
+
+      -- Artwork section
+      local image_nvim = get_image_nvim()
+      if item.image_url and item.image_url ~= "" then
+        local cache_key = (item.type or "img") .. "_" .. (item.id or item.name or "unknown")
+
+        -- Reserve blank lines for the image to render into
+        local art_reserved_lines = image_nvim and 8 or 0
+        artwork_line_idx = #lines -- 0-based index where image will be placed
+
+        local art = artwork.fetch_url(item.image_url, cache_key, function(result)
+          -- Async callback: render artwork when download finishes
+          if not vim.api.nvim_buf_is_valid(bufnr) then return end
+
+          if result and result.path then
+            if image_nvim and artwork_line_idx then
+              -- Get the preview window from the telescope state
+              local preview_win = self.state.winid
+              vim.schedule(function()
+                if not vim.api.nvim_buf_is_valid(bufnr) then return end
+                clear_image(current_preview_image)
+                current_preview_image = render_preview_image(
+                  image_nvim, result.path, preview_win, bufnr, artwork_line_idx
+                )
+              end)
+            end
+
+            -- Replace loading placeholder with path text (visible if image.nvim unavailable)
+            local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+            for i, line in ipairs(current_lines) do
+              if line:find(ICONS.loading) and line:find("Loading artwork") then
+                pcall(vim.api.nvim_buf_set_lines, bufnr, i - 1, i, false,
+                  { "  \u{f03e}  Album Art" })
+                pcall(vim.api.nvim_buf_add_highlight, bufnr, -1, "NowPlayingPreviewField", i - 1, 0, -1)
+                break
+              end
+            end
+          else
+            -- Download failed — show error instead of stuck spinner
+            local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+            for i, line in ipairs(current_lines) do
+              if line:find(ICONS.loading) and line:find("Loading artwork") then
+                pcall(vim.api.nvim_buf_set_lines, bufnr, i - 1, i, false,
+                  { "  \u{f03e}  Artwork unavailable" })
+                pcall(vim.api.nvim_buf_add_highlight, bufnr, -1, "NowPlayingPreviewBorder", i - 1, 0, -1)
+                break
+              end
+            end
+          end
+        end)
+
+        if art and art.path then
+          -- Already cached — render image immediately after buffer is set
+          if image_nvim then
+            add("  \u{f03e}  Album Art", "NowPlayingPreviewField")
+            for _ = 1, art_reserved_lines do
+              add("") -- blank lines for the image to occupy
+            end
+          else
+            add("  \u{f03e}  " .. art.path, "NowPlayingPreviewField")
+          end
+        else
+          add("  " .. ICONS.loading .. "  Loading artwork...", "NowPlayingLoading")
+          if image_nvim then
+            for _ = 1, art_reserved_lines do
+              add("") -- reserve space for the image
+            end
+          end
+        end
+        add("")
+      end
 
       -- Name (big)
       add("  " .. (item.name or "Unknown"), "NowPlayingPreviewTitle")
@@ -223,7 +359,7 @@ local function make_previewer()
       elseif item.type == "artist" then
         table.insert(hints, "  " .. ICONS.play .. "  <CR> Top tracks")
       elseif item.type == "playlist" then
-        table.insert(hints, "  " .. ICONS.play .. "  <CR> Browse tracks")
+        table.insert(hints, "  " .. ICONS.play .. "  <CR> Play playlist   " .. ICONS.track .. "  <C-t> Browse tracks")
       end
       for _, h in ipairs(hints) do
         add(h, "NowPlayingPreviewHint")
@@ -235,6 +371,28 @@ local function make_previewer()
       for _, hl in ipairs(highlights) do
         pcall(vim.api.nvim_buf_add_highlight, bufnr, -1, hl[4], hl[1], hl[2], hl[3])
       end
+
+      -- Render cached artwork image immediately after buffer lines are set
+      if image_nvim and item.image_url and item.image_url ~= "" and artwork_line_idx then
+        local cache_key = (item.type or "img") .. "_" .. (item.id or item.name or "unknown")
+        local art = artwork.fetch_url(item.image_url, cache_key)
+        if art and art.path then
+          vim.defer_fn(function()
+            if not vim.api.nvim_buf_is_valid(bufnr) then return end
+            local preview_win = self.state.winid
+            clear_image(current_preview_image)
+            current_preview_image = render_preview_image(
+              image_nvim, art.path, preview_win, bufnr, artwork_line_idx
+            )
+          end, 50) -- short defer to let telescope finish layout
+        end
+      end
+    end,
+
+    -- Clean up image when Telescope closes or preview changes
+    teardown = function(self)
+      clear_image(current_preview_image)
+      current_preview_image = nil
     end,
   })
 end
@@ -306,13 +464,26 @@ local function open_track_list(tracks, title)
         local selection = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
         if selection and selection.value and selection.value.uri then
-          client.play(selection.value.uri, function(ok, err)
-            if ok then
-              vim.notify("Playing: " .. selection.value.name, vim.log.levels.INFO, { title = "NowPlaying.nvim" })
-            else
-              vim.notify("Play failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
-            end
-          end)
+          local item = selection.value
+          local context_uri = item.playlist_uri or item.album_uri
+          if context_uri then
+            -- Play within playlist/album context so Spotify continues through the list
+            client.play(item.uri, { context_uri = context_uri, offset_uri = item.uri }, function(ok, err)
+              if ok then
+                vim.notify("Playing: " .. item.name, vim.log.levels.INFO, { title = "NowPlaying.nvim" })
+              else
+                vim.notify("Play failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
+              end
+            end)
+          else
+            client.play(item.uri, function(ok, err)
+              if ok then
+                vim.notify("Playing: " .. item.name, vim.log.levels.INFO, { title = "NowPlaying.nvim" })
+              else
+                vim.notify("Play failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
+              end
+            end)
+          end
         end
       end)
 
@@ -379,6 +550,11 @@ local function handle_selection(item, action)
         end
         for _, t in ipairs(tracks) do
           t.album = item.name
+          t.album_uri = item.uri -- context playback within the album
+          -- Propagate album artwork to each track so previewer can show it
+          if not t.image_url and item.image_url then
+            t.image_url = item.image_url
+          end
         end
         open_track_list(tracks, ICONS.album .. "  " .. item.name .. " \u{2014} " .. item.artist)
       end)
@@ -389,16 +565,22 @@ local function handle_selection(item, action)
         vim.notify("Failed to load artist: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
         return
       end
+      -- Propagate artist artwork to tracks that lack their own
+      for _, t in ipairs(tracks) do
+        if not t.image_url and item.image_url then
+          t.image_url = item.image_url
+        end
+      end
       open_track_list(tracks, ICONS.artist .. "  " .. item.name .. " \u{2014} Top Tracks")
     end)
   elseif item.type == "playlist" then
-    -- Drill down into playlist tracks
-    client.playlist_tracks(item.id, function(tracks, err)
-      if not tracks then
-        vim.notify("Failed to load playlist: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
-        return
+    -- Default action: play entire playlist
+    client.play(item.uri, function(ok, err)
+      if ok then
+        vim.notify("Playing playlist: " .. item.name, vim.log.levels.INFO, { title = "NowPlaying.nvim" })
+      else
+        vim.notify("Play failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
       end
-      open_track_list(tracks, ICONS.playlist .. "  " .. item.name)
     end)
   end
 end
@@ -469,7 +651,7 @@ function M.open(opts)
 
   pickers.new(opts, {
     prompt_title = ICONS.spotify .. " Spotify Search",
-    results_title = "Results  " .. ICONS.play .. " <CR> Play/Browse  " .. ICONS.queue .. " <C-q> Queue",
+    results_title = "Results  " .. ICONS.play .. " <CR> Play  " .. ICONS.queue .. " <C-q> Queue  " .. ICONS.track .. " <C-t> Browse",
     finder = finders.new_table({
       results = {},
       entry_maker = entry_maker,
@@ -573,6 +755,52 @@ function M.open(opts)
 
       map("i", "<C-q>", queue_action)
       map("n", "<C-q>", queue_action)
+
+      -- Ctrl-t = browse tracks (drill-down for playlists and albums)
+      local function browse_tracks()
+        local selection = action_state.get_selected_entry()
+        if not selection or not selection.value or selection.value.type == "loading" then
+          return
+        end
+        local item = selection.value
+        if item.type == "playlist" then
+          actions.close(prompt_bufnr)
+          client.playlist_tracks(item.id, function(tracks, err)
+            if not tracks then
+              vim.notify("Failed to load playlist: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
+              return
+            end
+            for _, t in ipairs(tracks) do
+              t.playlist_uri = item.uri
+              if not t.image_url and item.image_url then
+                t.image_url = item.image_url
+              end
+            end
+            open_track_list(tracks, ICONS.playlist .. "  " .. item.name)
+          end)
+        elseif item.type == "album" then
+          actions.close(prompt_bufnr)
+          client.album_tracks(item.id, function(tracks, err)
+            if not tracks then
+              vim.notify("Failed to load album: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
+              return
+            end
+            for _, t in ipairs(tracks) do
+              t.album = item.name
+              t.album_uri = item.uri
+              if not t.image_url and item.image_url then
+                t.image_url = item.image_url
+              end
+            end
+            open_track_list(tracks, ICONS.album .. "  " .. item.name .. " \u{2014} " .. item.artist)
+          end)
+        else
+          vim.notify("Browse tracks: select a playlist or album", vim.log.levels.WARN, { title = "NowPlaying.nvim" })
+        end
+      end
+
+      map("i", "<C-t>", browse_tracks)
+      map("n", "<C-t>", browse_tracks)
 
       return true
     end,

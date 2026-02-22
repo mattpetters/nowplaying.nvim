@@ -36,3 +36,8 @@ doc/tags
 # nvim log
 .nvimlog
 deps/
+
+# Coverage artifacts (stats/report are regenerated; badge is committed)
+luacov.stats.out
+luacov.stats.child.*.out
+luacov.report.out

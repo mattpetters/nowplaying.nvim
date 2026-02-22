@@ -145,4 +145,84 @@ function M.nearest_corner(rel_row, rel_col, total_width, total_height)
   end
 end
 
+-- -----------------------------------------------------------------------------
+-- Responsive layout helpers (pure functions)
+-- -----------------------------------------------------------------------------
+
+--- Return layout mode breakpoint based on panel dimensions.
+---@param width number
+---@param height number
+---@return string  one of: "large", "medium", "small", "tiny"
+function M.layout_breakpoint(width, height)
+  if width >= 55 and height >= 14 then
+    return "large"
+  end
+  if width >= 40 and height >= 10 then
+    return "medium"
+  end
+  if width >= 30 and height >= 8 then
+    return "small"
+  end
+  return "tiny"
+end
+
+--- Determine which panel elements should be visible for given dimensions.
+---@param width number
+---@param height number
+---@return table
+function M.visible_elements(width, height)
+  local bp = M.layout_breakpoint(width, height)
+  return {
+    artwork = (bp == "large" or bp == "medium"),
+    track_title = true,
+    artist = true,
+    album = (bp == "large" or bp == "medium"),
+    progress_bar = (bp == "large" or bp == "medium" or bp == "small"),
+    controls = (bp == "large" or bp == "medium"),
+    key_hints = (bp == "large"),
+  }
+end
+
+--- Compute artwork dimensions for a panel size and breakpoint.
+--- Returns {width=0,height=0} when artwork is hidden.
+---@param panel_width number
+---@param panel_height number
+---@param breakpoint string
+---@return table  { width = number, height = number }
+function M.compute_artwork_size(panel_width, panel_height, breakpoint)
+  if breakpoint == "large" then
+    return {
+      width = math.min(math.floor(panel_width * 0.35), 24),
+      height = math.min(math.floor(panel_height * 0.6), 12),
+    }
+  end
+
+  if breakpoint == "medium" then
+    return {
+      width = math.min(math.floor(panel_width * 0.25), 16),
+      height = math.min(math.floor(panel_height * 0.5), 8),
+    }
+  end
+
+  return { width = 0, height = 0 }
+end
+
+--- Compute layout decisions for the mini-player panel.
+---@param width number
+---@param height number
+---@return table
+function M.compute_layout(width, height)
+  local breakpoint = M.layout_breakpoint(width, height)
+  local elements = M.visible_elements(width, height)
+  local artwork = M.compute_artwork_size(width, height, breakpoint)
+
+  return {
+    breakpoint = breakpoint,
+    elements = elements,
+    artwork = artwork,
+    meta_right_width = math.max(width - artwork.width - 6, 15),
+    controls_width = width - 4,
+  }
+end
+
 return M
