@@ -16,6 +16,7 @@ local last_artwork_path -- Track the last artwork path to avoid re-rendering
 local last_image_key -- Track render geometry to avoid stale image placement
 local render_seq = 0 -- Monotonic token to discard stale deferred renders
 local last_accent_artwork = nil -- Track artwork path used for last accent extraction
+local drag_reposition_timer = nil -- Throttle timer for repositioning image during drag
 
 local function clear_current_image()
   if current_image then
@@ -655,6 +656,38 @@ local function refresh_image_after_geometry_change()
   end
 end
 
+--- Schedule a throttled image reposition during drag.
+--- Uses a short timer so that rapid drag events don't flood the renderer,
+--- but the image still follows the panel visually.
+local function reposition_image_throttled()
+  if not current_image and not (state.current and state.current.artwork and state.current.artwork.path) then
+    return
+  end
+  if drag_reposition_timer then
+    return -- Already scheduled, let the pending one fire
+  end
+  local uv = vim.uv or vim.loop
+  drag_reposition_timer = uv.new_timer()
+  drag_reposition_timer:start(60, 0, vim.schedule_wrap(function()
+    if drag_reposition_timer then
+      drag_reposition_timer:stop()
+      drag_reposition_timer:close()
+      drag_reposition_timer = nil
+    end
+    if not is_valid_window() then
+      return
+    end
+    -- Clear and re-render at new position
+    render_seq = render_seq + 1
+    clear_current_image()
+    last_image_key = nil
+    local snapshot = state.current
+    if snapshot and snapshot.artwork and snapshot.artwork.path then
+      try_render_image(snapshot.artwork.path)
+    end
+  end))
+end
+
 -- ── Left-drag: move ────────────────────────────────────────────
 
 function M._handle_drag()
@@ -682,13 +715,19 @@ function M._handle_drag()
     row = new_row,
     col = new_col,
   })
-  -- Do NOT re-render the image during drag — it causes flicker and ghosts.
-  -- The image is re-rendered on release once the window has settled.
+  -- Schedule a throttled re-render so the image follows the panel during drag
+  reposition_image_throttled()
 end
 
 function M._handle_release()
   drag_start_mouse = nil
   drag_start_win = nil
+  -- Cancel any pending throttled reposition
+  if drag_reposition_timer then
+    drag_reposition_timer:stop()
+    drag_reposition_timer:close()
+    drag_reposition_timer = nil
+  end
   if is_valid_window() then
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
     -- Re-render artwork at the new position after the drag ends.
@@ -787,6 +826,11 @@ function M._handle_resize_release()
   drag_start_win = nil
   drag_start_size = nil
   resize_corner = nil
+  if drag_reposition_timer then
+    drag_reposition_timer:stop()
+    drag_reposition_timer:close()
+    drag_reposition_timer = nil
+  end
   if is_valid_window() then
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
     refresh_image_after_geometry_change()

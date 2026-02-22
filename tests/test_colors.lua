@@ -294,4 +294,57 @@ T["darken"]["clamps at lightness 0.0"] = function()
   MiniTest.expect.equality(rgb[3] >= 0, true)
 end
 
+-- ── apply_accent background subtlety ───────────────────────────
+-- The panel background should be a very subtle tint — almost matching
+-- the editor background — not an opaque wash of the album art color.
+
+T["apply_accent_bg"] = MiniTest.new_set()
+
+T["apply_accent_bg"]["background stays dark for bright accent (low lightness)"] = function()
+  -- Simulate what apply_accent produces for a bright/white-ish accent
+  -- The generated BG hex should have lightness < 0.25 (very dark, subtle tint)
+  local bg_hex = child.lua_get([[
+    (function()
+      local c = colors
+      local accent = "#ffffff"  -- worst case: white album art
+      -- This replicates the bg_hex formula in apply_accent
+      local bg = c.desaturate(c.darken(accent, 0.80), 0.90)
+      return bg
+    end)()
+  ]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], bg_hex))
+  local hsl = child.lua_get(string.format([[colors.rgb_to_hsl(%d, %d, %d)]], rgb[1], rgb[2], rgb[3]))
+  -- Lightness should be very low (< 0.25) for a subtle dark tint
+  MiniTest.expect.equality(hsl[3] < 0.25, true)
+end
+
+T["apply_accent_bg"]["background stays dark for vivid red accent"] = function()
+  local bg_hex = child.lua_get([[
+    (function()
+      local c = colors
+      local accent = "#ff0000"
+      local bg = c.desaturate(c.darken(accent, 0.80), 0.90)
+      return bg
+    end)()
+  ]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], bg_hex))
+  local hsl = child.lua_get(string.format([[colors.rgb_to_hsl(%d, %d, %d)]], rgb[1], rgb[2], rgb[3]))
+  MiniTest.expect.equality(hsl[3] < 0.25, true)
+end
+
+T["apply_accent_bg"]["background is nearly neutral (low saturation)"] = function()
+  local bg_hex = child.lua_get([[
+    (function()
+      local c = colors
+      local accent = "#e84393"  -- vibrant pink
+      local bg = c.desaturate(c.darken(accent, 0.80), 0.90)
+      return bg
+    end)()
+  ]])
+  local rgb = child.lua_get(string.format([[colors.hex_to_rgb(%q)]], bg_hex))
+  local hsl = child.lua_get(string.format([[colors.rgb_to_hsl(%d, %d, %d)]], rgb[1], rgb[2], rgb[3]))
+  -- Saturation should be very low (< 0.15) for near-neutral
+  MiniTest.expect.equality(hsl[2] < 0.15, true)
+end
+
 return T

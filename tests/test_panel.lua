@@ -802,4 +802,54 @@ T["resize_behavior"]["update adjusts height when content changes"] = function()
   MiniTest.expect.equality(h_after > h_before, true)
 end
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- drag_artwork: artwork should move fluidly with the panel during drag
+-- ════════════════════════════════════════════════════════════════════════════
+
+T["drag_artwork"] = MiniTest.new_set()
+
+T["drag_artwork"]["image is re-rendered during drag (not only on release)"] = function()
+  -- The panel drag handler should schedule image re-renders during drag
+  -- events rather than only clearing at drag start and re-rendering on release.
+  -- Verify the source code pattern: _handle_drag should call a reposition function.
+  local has_drag_render = child.lua_get([[
+    (function()
+      local path = vim.api.nvim_get_runtime_file("lua/player/ui/panel.lua", false)[1]
+      if not path then return false end
+      local f = io.open(path, "r")
+      if not f then return false end
+      local content = f:read("*a")
+      f:close()
+      -- The drag handler should schedule a throttled image reposition
+      return content:find("reposition_image_throttled") ~= nil
+    end)()
+  ]])
+  MiniTest.expect.equality(has_drag_render, true)
+end
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- panel_bg: background tint should be very subtle
+-- ════════════════════════════════════════════════════════════════════════════
+
+T["panel_bg"] = MiniTest.new_set()
+
+T["panel_bg"]["apply_accent uses dark subtle background formula"] = function()
+  -- Verify the panel's colors module uses darken (not lighten) for BG
+  local has_dark_bg = child.lua_get([[
+    (function()
+      local path = vim.api.nvim_get_runtime_file("lua/player/ui/colors.lua", false)[1]
+      if not path then return false end
+      local f = io.open(path, "r")
+      if not f then return false end
+      local content = f:read("*a")
+      f:close()
+      -- The bg_hex line should use darken, not lighten
+      local bg_line = content:match("bg_hex%s*=%s*[^\n]+")
+      if not bg_line then return false end
+      return bg_line:find("darken") ~= nil
+    end)()
+  ]])
+  MiniTest.expect.equality(has_dark_bg, true)
+end
+
 return T

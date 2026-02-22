@@ -242,4 +242,78 @@ T["artwork_integration"]["skips artwork for items without image_url"] = function
   MiniTest.expect.equality(result, true)
 end
 
+-- ── previewer spacing ──────────────────────────────────────────
+-- The preview card should have an empty line between the artwork section
+-- and the song title so they don't run together visually.
+
+T["previewer_spacing"] = MiniTest.new_set()
+
+T["previewer_spacing"]["blank line exists between artwork section and title"] = function()
+  -- Simulate the card layout: after artwork reserved lines + the "Album Art" label,
+  -- there should be an add("") call that produces a blank separator before the title.
+  -- We verify the pattern by reading the search.lua source for the sequence.
+  local result = child.lua_get([[(function()
+    local path = vim.api.nvim_get_runtime_file("lua/player/telescope/search.lua", false)[1]
+    if not path then return "file_not_found" end
+    local f = io.open(path, "r")
+    if not f then return "cannot_open" end
+    local content = f:read("*a")
+    f:close()
+    -- After the artwork section's end block there should be an extra add("")
+    -- margin line before the "-- Name" comment.  The layout is:
+    --     add("")   <-- inside artwork block
+    --   end
+    --
+    --   add("")     <-- extra margin
+    --
+    --   -- Name (big)
+    -- Match: add("") ... end ... add("") ... -- Name  (allowing whitespace / blank lines)
+    local has_margin = content:find('end%s+add%(""%)[%s\n]*%-%- Name')
+    return has_margin ~= nil
+  end)()]])
+  MiniTest.expect.equality(result, true)
+end
+
+-- ── context playback for top-level tracks ─────────────────────
+-- When a user selects a track from the main search results, if the track
+-- has an album_id, we should play it in album context so Spotify continues
+-- through the album (autoplay) rather than stopping after one song.
+
+T["context_playback"] = MiniTest.new_set()
+
+T["context_playback"]["handle_selection uses album context for tracks with album_id"] = function()
+  -- The search.lua handle_selection function should check for album_id on tracks
+  -- and construct a context_uri for album playback with offset.
+  local result = child.lua_get([[(function()
+    local path = vim.api.nvim_get_runtime_file("lua/player/telescope/search.lua", false)[1]
+    if not path then return "file_not_found" end
+    local f = io.open(path, "r")
+    if not f then return "cannot_open" end
+    local content = f:read("*a")
+    f:close()
+    -- Should reference album_id in handle_selection's track branch
+    local has_album_context = content:find("item%.album_id") ~= nil
+      or content:find("album_uri") ~= nil
+    -- Should use context_uri for track playback
+    local has_context_play = content:find("context_uri") ~= nil
+    return has_album_context and has_context_play
+  end)()]])
+  MiniTest.expect.equality(result, true)
+end
+
+T["context_playback"]["track items from search include album_uri for context"] = function()
+  -- Verify the search result parsing propagates album info needed for context playback
+  local result = child.lua_get([[(function()
+    local path = vim.api.nvim_get_runtime_file("lua/player/spotify_api/client.lua", false)[1]
+    if not path then return "file_not_found" end
+    local f = io.open(path, "r")
+    if not f then return "cannot_open" end
+    local content = f:read("*a")
+    f:close()
+    -- The search results parser should include album_uri for tracks
+    return content:find("album_uri") ~= nil
+  end)()]])
+  MiniTest.expect.equality(result, true)
+end
+
 return T

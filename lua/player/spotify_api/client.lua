@@ -168,6 +168,7 @@ function M.search(query, callback)
               duration_ms = item.duration_ms,
               popularity = item.popularity,
               album_id = item.album and item.album.id,
+              album_uri = item.album and item.album.uri,
               image_url = item.album and item.album.images and item.album.images[1] and item.album.images[1].url,
             })
           end

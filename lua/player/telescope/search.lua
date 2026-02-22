@@ -307,6 +307,8 @@ local function make_previewer()
         add("")
       end
 
+      add("")
+
       -- Name (big)
       add("  " .. (item.name or "Unknown"), "NowPlayingPreviewTitle")
       add("")
@@ -525,13 +527,25 @@ local function handle_selection(item, action)
         end
       end)
     else
-      client.play(item.uri, function(ok, err)
-        if ok then
-          vim.notify("Playing: " .. item.name, vim.log.levels.INFO, { title = "NowPlaying.nvim" })
-        else
-          vim.notify("Play failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
-        end
-      end)
+      -- Play in album context if available so Spotify auto-plays through the album
+      local context_uri = item.playlist_uri or item.album_uri
+      if context_uri then
+        client.play(item.uri, { context_uri = context_uri, offset_uri = item.uri }, function(ok, err)
+          if ok then
+            vim.notify("Playing: " .. item.name, vim.log.levels.INFO, { title = "NowPlaying.nvim" })
+          else
+            vim.notify("Play failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
+          end
+        end)
+      else
+        client.play(item.uri, function(ok, err)
+          if ok then
+            vim.notify("Playing: " .. item.name, vim.log.levels.INFO, { title = "NowPlaying.nvim" })
+          else
+            vim.notify("Play failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "NowPlaying.nvim" })
+          end
+        end)
+      end
     end
   elseif item.type == "album" then
     if action == "queue" then

@@ -265,9 +265,9 @@ function M.apply_accent(win, accent_hex)
   -- as a subtle colored frame rather than a neon outline.
   local border_hex = M.darken(M.desaturate(accent_hex, 0.3), 0.2)
 
-  -- Background: heavily desaturate and push very close to the editor bg
-  -- so it's barely perceptible — a tint, not a paint bucket.
-  local bg_hex = M.desaturate(M.lighten(accent_hex, 0.38), 0.75)
+  -- Background: darken heavily and desaturate so it's barely perceptible
+  -- — a subtle tint that blends with the editor background, not a paint bucket.
+  local bg_hex = M.desaturate(M.darken(accent_hex, 0.80), 0.90)
 
   -- Create highlight groups for the accent theme
   vim.api.nvim_set_hl(0, "NowPlayingBorder", { fg = border_hex })
