@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <filter id="warmShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#fab387" flood-opacity="0.3"/>
+    </filter>
+    <filter id="coolShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#89b4fa" flood-opacity="0.3"/>
+    </filter>
+    <linearGradient id="warmBorder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fab387"/>
+      <stop offset="100%" stop-color="#f38ba8"/>
+    </linearGradient>
+    <linearGradient id="coolBorder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#cba6f7"/>
+    </linearGradient>
+    <linearGradient id="warmProgress" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fab387"/>
+      <stop offset="100%" stop-color="#f9e2af"/>
+    </linearGradient>
+    <linearGradient id="coolProgress" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#b4befe"/>
+    </linearGradient>
+    <!-- Warm album art gradient -->
+    <linearGradient id="warmArt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f38ba8"/>
+      <stop offset="30%" stop-color="#fab387"/>
+      <stop offset="60%" stop-color="#f9e2af"/>
+      <stop offset="100%" stop-color="#fab387"/>
+    </linearGradient>
+    <!-- Cool album art gradient -->
+    <linearGradient id="coolArt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#74c7ec"/>
+      <stop offset="30%" stop-color="#89b4fa"/>
+      <stop offset="60%" stop-color="#b4befe"/>
+      <stop offset="100%" stop-color="#cba6f7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Editor background -->
+  <rect width="800" height="500" rx="10" fill="#1e1e2e"/>
+
+  <!-- Title bar -->
+  <rect width="800" height="32" rx="10" fill="#181825"/>
+  <rect y="22" width="800" height="10" fill="#181825"/>
+  <circle cx="20" cy="16" r="6" fill="#f38ba8"/>
+  <circle cx="40" cy="16" r="6" fill="#f9e2af"/>
+  <circle cx="60" cy="16" r="6" fill="#a6e3a1"/>
+  <text x="400" y="20" text-anchor="middle" font-family="monospace" font-size="12" fill="#6c7086">nvim — Adaptive Colors Demo</text>
+
+  <!-- Heading -->
+  <text x="400" y="62" text-anchor="middle" font-family="monospace" font-size="13" fill="#6c7086">Colors adapt to album artwork — borders, accents, and progress bars change per track</text>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- WARM PANEL (left) -->
+  <!-- ═══════════════════════════════ -->
+  <g filter="url(#warmShadow)">
+    <rect x="30" y="82" width="355" height="280" rx="8" fill="#181825"/>
+    <!-- Warm tinted background overlay -->
+    <rect x="30" y="82" width="355" height="280" rx="8" fill="#fab387" opacity="0.03"/>
+    <rect x="30" y="82" width="355" height="280" rx="8" fill="none" stroke="url(#warmBorder)" stroke-width="2"/>
+  </g>
+
+  <!-- Warm panel header -->
+  <rect x="32" y="84" width="351" height="26" rx="6" fill="#11111b"/>
+  <text x="50" y="101" font-family="monospace" font-size="11" fill="#fab387" font-weight="bold">♫ Now Playing</text>
+  <text x="330" y="101" font-family="monospace" font-size="9" fill="#585b70">Warm</text>
+
+  <!-- Warm album art -->
+  <rect x="50" y="122" width="90" height="90" rx="4" fill="url(#warmArt)"/>
+  <circle cx="80" cy="155" r="18" fill="#f38ba8" opacity="0.5"/>
+  <circle cx="110" cy="170" r="14" fill="#f9e2af" opacity="0.6"/>
+  <rect x="60" y="175" width="45" height="20" rx="3" fill="#fab387" opacity="0.4"/>
+
+  <!-- Warm track info -->
+  <text x="156" y="138" font-family="monospace" font-size="10" fill="#585b70">TRACK</text>
+  <text x="156" y="156" font-family="monospace" font-size="14" fill="#cdd6f4" font-weight="bold">Blinding Lights</text>
+
+  <text x="156" y="178" font-family="monospace" font-size="10" fill="#585b70">ARTIST</text>
+  <text x="156" y="194" font-family="monospace" font-size="12" fill="#fab387">The Weeknd</text>
+
+  <text x="156" y="212" font-family="monospace" font-size="10" fill="#585b70">ALBUM</text>
+  <text x="156" y="228" font-family="monospace" font-size="11" fill="#f9e2af">After Hours</text>
+
+  <!-- Warm progress bar -->
+  <line x1="50" y1="248" x2="365" y2="248" stroke="#313244" stroke-width="0.5"/>
+  <text x="50" y="268" font-family="monospace" font-size="10" fill="#585b70">1:42</text>
+  <rect x="88" y="260" width="240" height="8" rx="4" fill="#313244"/>
+  <rect x="88" y="260" width="120" height="8" rx="4" fill="url(#warmProgress)"/>
+  <circle cx="208" cy="264" r="5" fill="#fab387"/>
+  <text x="340" y="268" font-family="monospace" font-size="10" fill="#585b70">3:20</text>
+
+  <!-- Warm controls -->
+  <g transform="translate(50, 285)">
+    <rect x="0" y="0" width="40" height="22" rx="3" fill="#313244"/>
+    <text x="9" y="16" font-family="monospace" font-size="11" fill="#585b70">⏮</text>
+
+    <rect x="50" y="0" width="50" height="22" rx="3" fill="#fab387" opacity="0.15"/>
+    <rect x="50" y="0" width="50" height="22" rx="3" fill="none" stroke="#fab387" stroke-width="0.8"/>
+    <text x="63" y="16" font-family="monospace" font-size="11" fill="#fab387">⏯</text>
+
+    <rect x="110" y="0" width="40" height="22" rx="3" fill="#313244"/>
+    <text x="119" y="16" font-family="monospace" font-size="11" fill="#585b70">⏭</text>
+  </g>
+
+  <!-- Warm color palette indicator -->
+  <g transform="translate(50, 320)">
+    <text x="0" y="12" font-family="monospace" font-size="9" fill="#45475a">Extracted palette:</text>
+    <rect x="120" y="2" width="14" height="14" rx="3" fill="#f38ba8"/>
+    <rect x="138" y="2" width="14" height="14" rx="3" fill="#fab387"/>
+    <rect x="156" y="2" width="14" height="14" rx="3" fill="#f9e2af"/>
+    <rect x="174" y="2" width="14" height="14" rx="3" fill="#eba0ac"/>
+    <rect x="192" y="2" width="14" height="14" rx="3" fill="#f5c2e7"/>
+  </g>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- COOL PANEL (right) -->
+  <!-- ═══════════════════════════════ -->
+  <g filter="url(#coolShadow)">
+    <rect x="415" y="82" width="355" height="280" rx="8" fill="#181825"/>
+    <!-- Cool tinted background overlay -->
+    <rect x="415" y="82" width="355" height="280" rx="8" fill="#89b4fa" opacity="0.03"/>
+    <rect x="415" y="82" width="355" height="280" rx="8" fill="none" stroke="url(#coolBorder)" stroke-width="2"/>
+  </g>
+
+  <!-- Cool panel header -->
+  <rect x="417" y="84" width="351" height="26" rx="6" fill="#11111b"/>
+  <text x="435" y="101" font-family="monospace" font-size="11" fill="#89b4fa" font-weight="bold">♫ Now Playing</text>
+  <text x="720" y="101" font-family="monospace" font-size="9" fill="#585b70">Cool</text>
+
+  <!-- Cool album art -->
+  <rect x="435" y="122" width="90" height="90" rx="4" fill="url(#coolArt)"/>
+  <circle cx="465" cy="155" r="18" fill="#89b4fa" opacity="0.5"/>
+  <circle cx="495" cy="170" r="14" fill="#cba6f7" opacity="0.6"/>
+  <rect x="445" y="175" width="45" height="20" rx="3" fill="#b4befe" opacity="0.4"/>
+
+  <!-- Cool track info -->
+  <text x="541" y="138" font-family="monospace" font-size="10" fill="#585b70">TRACK</text>
+  <text x="541" y="156" font-family="monospace" font-size="14" fill="#cdd6f4" font-weight="bold">Midnight City</text>
+
+  <text x="541" y="178" font-family="monospace" font-size="10" fill="#585b70">ARTIST</text>
+  <text x="541" y="194" font-family="monospace" font-size="12" fill="#89b4fa">M83</text>
+
+  <text x="541" y="212" font-family="monospace" font-size="10" fill="#585b70">ALBUM</text>
+  <text x="541" y="228" font-family="monospace" font-size="11" fill="#b4befe">Hurry Up, We're Dreaming</text>
+
+  <!-- Cool progress bar -->
+  <line x1="435" y1="248" x2="750" y2="248" stroke="#313244" stroke-width="0.5"/>
+  <text x="435" y="268" font-family="monospace" font-size="10" fill="#585b70">2:55</text>
+  <rect x="473" y="260" width="240" height="8" rx="4" fill="#313244"/>
+  <rect x="473" y="260" width="170" height="8" rx="4" fill="url(#coolProgress)"/>
+  <circle cx="643" cy="264" r="5" fill="#89b4fa"/>
+  <text x="725" y="268" font-family="monospace" font-size="10" fill="#585b70">4:03</text>
+
+  <!-- Cool controls -->
+  <g transform="translate(435, 285)">
+    <rect x="0" y="0" width="40" height="22" rx="3" fill="#313244"/>
+    <text x="9" y="16" font-family="monospace" font-size="11" fill="#585b70">⏮</text>
+
+    <rect x="50" y="0" width="50" height="22" rx="3" fill="#89b4fa" opacity="0.15"/>
+    <rect x="50" y="0" width="50" height="22" rx="3" fill="none" stroke="#89b4fa" stroke-width="0.8"/>
+    <text x="63" y="16" font-family="monospace" font-size="11" fill="#89b4fa">⏯</text>
+
+    <rect x="110" y="0" width="40" height="22" rx="3" fill="#313244"/>
+    <text x="119" y="16" font-family="monospace" font-size="11" fill="#585b70">⏭</text>
+  </g>
+
+  <!-- Cool color palette indicator -->
+  <g transform="translate(435, 320)">
+    <text x="0" y="12" font-family="monospace" font-size="9" fill="#45475a">Extracted palette:</text>
+    <rect x="120" y="2" width="14" height="14" rx="3" fill="#74c7ec"/>
+    <rect x="138" y="2" width="14" height="14" rx="3" fill="#89b4fa"/>
+    <rect x="156" y="2" width="14" height="14" rx="3" fill="#b4befe"/>
+    <rect x="174" y="2" width="14" height="14" rx="3" fill="#cba6f7"/>
+    <rect x="192" y="2" width="14" height="14" rx="3" fill="#94e2d5"/>
+  </g>
+
+  <!-- Arrow connecting the two panels -->
+  <text x="400" y="222" text-anchor="middle" font-family="monospace" font-size="18" fill="#45475a">⟷</text>
+
+  <!-- Bottom explanation -->
+  <rect x="100" y="382" width="600" height="90" rx="8" fill="#11111b"/>
+  <rect x="100" y="382" width="600" height="90" rx="8" fill="none" stroke="#313244" stroke-width="1"/>
+
+  <text x="400" y="406" text-anchor="middle" font-family="monospace" font-size="12" fill="#cdd6f4" font-weight="bold">🎨 Adaptive Color Extraction</text>
+
+  <text x="400" y="428" text-anchor="middle" font-family="monospace" font-size="11" fill="#6c7086">Colors are extracted from album artwork and applied to:</text>
+
+  <text x="160" y="450" font-family="monospace" font-size="11" fill="#fab387">▸ Border</text>
+  <text x="290" y="450" font-family="monospace" font-size="11" fill="#f9e2af">▸ Progress bar</text>
+  <text x="440" y="450" font-family="monospace" font-size="11" fill="#89b4fa">▸ Accents</text>
+  <text x="560" y="450" font-family="monospace" font-size="11" fill="#cba6f7">▸ Highlights</text>
+
+  <text x="400" y="466" text-anchor="middle" font-family="monospace" font-size="9" fill="#45475a">Uses median-cut quantization for dominant color palette extraction</text>
+</svg>
