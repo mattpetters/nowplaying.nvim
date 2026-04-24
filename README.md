@@ -32,14 +32,14 @@ This fork extends the original [Ferouk/nowplaying.nvim](https://github.com/Ferou
 - **Adaptive accent colors** — panel border and background tint are extracted from the current album artwork via ImageMagick.
 - **Playlist & album context playback** — tracks from playlist/album drill-downs play with `context_uri` so Spotify continues through the list.
 - **Marquee scrolling statusline** — long track info scrolls smoothly in the statusline instead of hard-truncating.
-- **macOS Now Playing provider** — additional `macos_media` provider for system-level media detection.
+- **macOS Now Playing provider** — additional `macos_media` provider for system-level media detection. Requires the external `nowplaying-cli` binary (`brew install nowplaying-cli`).
 - **340+ tests** — comprehensive test suite across 15 modules.
 
 ---
 
 ## Features ✨
 
-- AppleScript-powered Apple Music and Spotify support.
+- AppleScript-powered Apple Music and Spotify support; the optional `macos_media` provider requires `nowplaying-cli` (`brew install nowplaying-cli`).
 - Spotify Web API with PKCE OAuth (search, playback, queue).
 - Telescope picker for searching tracks, albums, artists, and playlists — with artwork previews.
 - Responsive floating panel with artwork, metadata, progress bar, and controls.
