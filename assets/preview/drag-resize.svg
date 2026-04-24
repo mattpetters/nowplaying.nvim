@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <filter id="dragShadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <linearGradient id="dragBorder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#b4befe"/>
+    </linearGradient>
+    <linearGradient id="handleGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#89b4fa" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#89b4fa" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#89b4fa" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="dragProgress" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#b4befe"/>
+    </linearGradient>
+    <filter id="cursorGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Editor background -->
+  <rect width="800" height="500" rx="10" fill="#1e1e2e"/>
+
+  <!-- Title bar -->
+  <rect width="800" height="32" rx="10" fill="#181825"/>
+  <rect y="22" width="800" height="10" fill="#181825"/>
+  <circle cx="20" cy="16" r="6" fill="#f38ba8"/>
+  <circle cx="40" cy="16" r="6" fill="#f9e2af"/>
+  <circle cx="60" cy="16" r="6" fill="#a6e3a1"/>
+  <text x="400" y="20" text-anchor="middle" font-family="monospace" font-size="12" fill="#6c7086">nvim — Drag &amp; Resize</text>
+
+  <!-- Faint background code -->
+  <g opacity="0.3">
+    <text x="20" y="60" font-family="monospace" font-size="11" fill="#45475a"> 1</text>
+    <text x="50" y="60" font-family="monospace" font-size="11" fill="#6c7086">-- Panel supports mouse drag &amp; resize</text>
+    <text x="20" y="78" font-family="monospace" font-size="11" fill="#45475a"> 2</text>
+    <text x="20" y="96" font-family="monospace" font-size="11" fill="#45475a"> 3</text>
+    <text x="50" y="96" font-family="monospace" font-size="11" fill="#cba6f7">local</text>
+    <text x="86" y="96" font-family="monospace" font-size="11" fill="#cdd6f4"> M = {}</text>
+    <text x="20" y="456" font-family="monospace" font-size="11" fill="#45475a">22</text>
+    <text x="50" y="456" font-family="monospace" font-size="11" fill="#cba6f7">return</text>
+    <text x="95" y="456" font-family="monospace" font-size="11" fill="#cdd6f4"> M</text>
+  </g>
+
+  <!-- Dim overlay -->
+  <rect width="800" height="500" fill="#1e1e2e" opacity="0.4" rx="10"/>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- Main floating panel -->
+  <!-- ═══════════════════════════════ -->
+  <g filter="url(#dragShadow)">
+    <rect x="170" y="65" width="460" height="310" rx="8" fill="#181825"/>
+    <rect x="170" y="65" width="460" height="310" rx="8" fill="none" stroke="url(#dragBorder)" stroke-width="2"/>
+  </g>
+
+  <!-- Drag handle indicators on edges (highlighted borders) -->
+  <!-- Top edge handle -->
+  <rect x="320" y="63" width="160" height="4" rx="2" fill="url(#handleGlow)" opacity="0.8"/>
+  <!-- Bottom edge handle -->
+  <rect x="320" y="373" width="160" height="4" rx="2" fill="url(#handleGlow)" opacity="0.8"/>
+  <!-- Left edge handle -->
+  <rect x="168" y="170" width="4" height="120" rx="2" fill="url(#handleGlow)" opacity="0.8" transform="rotate(90 170 230)"/>
+  <rect x="168" y="170" width="4" height="120" rx="2" fill="#89b4fa" opacity="0.3"/>
+  <!-- Right edge handle -->
+  <rect x="628" y="170" width="4" height="120" rx="2" fill="#89b4fa" opacity="0.3"/>
+
+  <!-- Corner resize handles -->
+  <!-- Top-left -->
+  <rect x="167" y="62" width="12" height="12" rx="2" fill="#89b4fa" opacity="0.6"/>
+  <rect x="167" y="62" width="12" height="12" rx="2" fill="none" stroke="#89b4fa" stroke-width="1"/>
+  <!-- Top-right -->
+  <rect x="621" y="62" width="12" height="12" rx="2" fill="#89b4fa" opacity="0.6"/>
+  <rect x="621" y="62" width="12" height="12" rx="2" fill="none" stroke="#89b4fa" stroke-width="1"/>
+  <!-- Bottom-left -->
+  <rect x="167" y="366" width="12" height="12" rx="2" fill="#89b4fa" opacity="0.6"/>
+  <rect x="167" y="366" width="12" height="12" rx="2" fill="none" stroke="#89b4fa" stroke-width="1"/>
+  <!-- Bottom-right (most prominent - cursor target) -->
+  <rect x="621" y="366" width="12" height="12" rx="2" fill="#89b4fa" opacity="0.9"/>
+  <rect x="621" y="366" width="12" height="12" rx="2" fill="none" stroke="#cdd6f4" stroke-width="1.5"/>
+
+  <!-- Panel title bar (draggable area) -->
+  <rect x="172" y="67" width="456" height="30" rx="6" fill="#11111b"/>
+  <!-- Drag dots pattern in title bar -->
+  <g opacity="0.5">
+    <circle cx="370" cy="82" r="1.5" fill="#585b70"/>
+    <circle cx="380" cy="82" r="1.5" fill="#585b70"/>
+    <circle cx="390" cy="82" r="1.5" fill="#585b70"/>
+    <circle cx="400" cy="82" r="1.5" fill="#585b70"/>
+    <circle cx="410" cy="82" r="1.5" fill="#585b70"/>
+    <circle cx="420" cy="82" r="1.5" fill="#585b70"/>
+    <circle cx="430" cy="82" r="1.5" fill="#585b70"/>
+  </g>
+  <text x="190" y="87" font-family="monospace" font-size="11" fill="#89b4fa" font-weight="bold">♫ Now Playing</text>
+  <text x="545" y="87" font-family="monospace" font-size="10" fill="#45475a">⣿ drag</text>
+  <text x="612" y="87" font-family="monospace" font-size="11" fill="#585b70">✕</text>
+
+  <!-- Panel content -->
+  <!-- Album art -->
+  <rect x="192" y="108" width="100" height="100" rx="4" fill="#313244"/>
+  <rect x="196" y="112" width="92" height="92" rx="2" fill="#1e1e2e"/>
+  <text x="242" y="158" text-anchor="middle" font-family="monospace" font-size="24" fill="#45475a">♫</text>
+
+  <!-- Track info -->
+  <text x="310" y="128" font-family="monospace" font-size="14" fill="#cdd6f4" font-weight="bold">All The Small Things</text>
+  <text x="310" y="148" font-family="monospace" font-size="12" fill="#89b4fa">blink-182</text>
+  <text x="310" y="166" font-family="monospace" font-size="11" fill="#a6e3a1">Enema of the State</text>
+
+  <!-- Progress bar -->
+  <text x="192" y="236" font-family="monospace" font-size="10" fill="#585b70">2:14</text>
+  <rect x="232" y="227" width="336" height="8" rx="4" fill="#313244"/>
+  <rect x="232" y="227" width="198" height="8" rx="4" fill="url(#dragProgress)"/>
+  <circle cx="430" cy="231" r="5" fill="#89b4fa"/>
+  <text x="582" y="236" font-family="monospace" font-size="10" fill="#585b70">3:47</text>
+
+  <!-- Controls -->
+  <g transform="translate(250, 255)">
+    <rect x="0" y="0" width="36" height="24" rx="3" fill="#313244"/>
+    <text x="8" y="17" font-family="monospace" font-size="11" fill="#585b70">⏮</text>
+
+    <rect x="46" y="0" width="46" height="24" rx="3" fill="#89b4fa" opacity="0.15"/>
+    <rect x="46" y="0" width="46" height="24" rx="3" fill="none" stroke="#89b4fa" stroke-width="0.8"/>
+    <text x="58" y="17" font-family="monospace" font-size="12" fill="#89b4fa">⏯</text>
+
+    <rect x="102" y="0" width="36" height="24" rx="3" fill="#313244"/>
+    <text x="110" y="17" font-family="monospace" font-size="11" fill="#585b70">⏭</text>
+  </g>
+
+  <!-- Size indicator -->
+  <text x="192" y="310" font-family="monospace" font-size="9" fill="#45475a">Size: 58×20  │  Position: (21, 4)</text>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- Cursor near bottom-right corner -->
+  <!-- ═══════════════════════════════ -->
+  <g filter="url(#cursorGlow)" transform="translate(635, 374)">
+    <!-- Resize cursor arrow (↘) -->
+    <polygon points="0,0 18,18 18,10 10,10 10,18" fill="#cdd6f4" opacity="0.9"/>
+    <polygon points="0,0 5,14 7,7 14,5" fill="#cdd6f4" opacity="0.9"/>
+  </g>
+
+  <!-- Resize arrow indicators near the cursor -->
+  <g transform="translate(650, 395)" opacity="0.7">
+    <text x="0" y="0" font-family="monospace" font-size="14" fill="#89b4fa">⤡</text>
+    <text x="15" y="0" font-family="monospace" font-size="10" fill="#6c7086">resize</text>
+  </g>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- Move arrow indicator on title bar -->
+  <!-- ═══════════════════════════════ -->
+  <g transform="translate(270, 50)" opacity="0.7">
+    <!-- Drag arrows -->
+    <text x="0" y="0" font-family="monospace" font-size="12" fill="#89b4fa">✥</text>
+    <text x="15" y="0" font-family="monospace" font-size="10" fill="#6c7086">move</text>
+  </g>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- Dashed outline showing resize ghost -->
+  <!-- ═══════════════════════════════ -->
+  <rect x="170" y="65" width="500" height="340" rx="8" fill="none" stroke="#89b4fa" stroke-width="1" stroke-dasharray="6,4" opacity="0.3"/>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- Bottom caption -->
+  <!-- ═══════════════════════════════ -->
+  <rect x="120" y="400" width="560" height="80" rx="8" fill="#11111b" opacity="0.95"/>
+  <rect x="120" y="400" width="560" height="80" rx="8" fill="none" stroke="#313244" stroke-width="1"/>
+
+  <text x="400" y="424" text-anchor="middle" font-family="monospace" font-size="12" fill="#cdd6f4" font-weight="bold">🖱 Mouse Interaction</text>
+
+  <text x="160" y="448" font-family="monospace" font-size="11" fill="#89b4fa">← drag title bar to move</text>
+  <text x="440" y="448" font-family="monospace" font-size="11" fill="#89b4fa">corners to resize →</text>
+
+  <text x="160" y="468" font-family="monospace" font-size="10" fill="#585b70">Hold title bar</text>
+  <text x="310" y="468" font-family="monospace" font-size="10" fill="#45475a">│</text>
+  <text x="330" y="468" font-family="monospace" font-size="10" fill="#585b70">Drag edges</text>
+  <text x="460" y="468" font-family="monospace" font-size="10" fill="#45475a">│</text>
+  <text x="480" y="468" font-family="monospace" font-size="10" fill="#585b70">Drag corners</text>
+</svg>

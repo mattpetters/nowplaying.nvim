@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <linearGradient id="panelBorder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="50%" stop-color="#b4befe"/>
+      <stop offset="100%" stop-color="#cba6f7"/>
+    </linearGradient>
+    <linearGradient id="artGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f38ba8"/>
+      <stop offset="25%" stop-color="#fab387"/>
+      <stop offset="50%" stop-color="#f9e2af"/>
+      <stop offset="75%" stop-color="#a6e3a1"/>
+      <stop offset="100%" stop-color="#89b4fa"/>
+    </linearGradient>
+    <linearGradient id="progressFill" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#b4befe"/>
+    </linearGradient>
+    <filter id="panelShadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Editor background with some fake code -->
+  <rect width="800" height="500" rx="10" fill="#1e1e2e"/>
+
+  <!-- Fake line numbers and code in background -->
+  <text x="20" y="30" font-family="monospace" font-size="11" fill="#45475a"> 14</text>
+  <text x="55" y="30" font-family="monospace" font-size="11" fill="#cba6f7">local</text>
+  <text x="96" y="30" font-family="monospace" font-size="11" fill="#cdd6f4"> nowplaying = </text>
+  <text x="206" y="30" font-family="monospace" font-size="11" fill="#89b4fa">require</text>
+  <text x="255" y="30" font-family="monospace" font-size="11" fill="#a6e3a1">("nowplaying")</text>
+
+  <text x="20" y="48" font-family="monospace" font-size="11" fill="#45475a"> 15</text>
+
+  <text x="20" y="66" font-family="monospace" font-size="11" fill="#45475a"> 16</text>
+  <text x="55" y="66" font-family="monospace" font-size="11" fill="#6c7086">-- Setup with responsive panels</text>
+
+  <text x="20" y="84" font-family="monospace" font-size="11" fill="#45475a"> 17</text>
+  <text x="55" y="84" font-family="monospace" font-size="11" fill="#cdd6f4">nowplaying.</text>
+  <text x="139" y="84" font-family="monospace" font-size="11" fill="#89b4fa">setup</text>
+  <text x="172" y="84" font-family="monospace" font-size="11" fill="#cdd6f4">({</text>
+
+  <text x="20" y="102" font-family="monospace" font-size="11" fill="#45475a"> 18</text>
+  <text x="55" y="102" font-family="monospace" font-size="11" fill="#89b4fa">  panel</text>
+  <text x="103" y="102" font-family="monospace" font-size="11" fill="#cdd6f4"> = {</text>
+
+  <text x="20" y="120" font-family="monospace" font-size="11" fill="#45475a"> 19</text>
+  <text x="55" y="120" font-family="monospace" font-size="11" fill="#89b4fa">    responsive</text>
+  <text x="145" y="120" font-family="monospace" font-size="11" fill="#cdd6f4"> = </text>
+  <text x="168" y="120" font-family="monospace" font-size="11" fill="#fab387">true</text>
+
+  <!-- Dim the background code -->
+  <rect width="800" height="500" fill="#1e1e2e" opacity="0.5" rx="10"/>
+
+  <!-- Floating panel with shadow -->
+  <g filter="url(#panelShadow)">
+    <!-- Panel background -->
+    <rect x="155" y="60" width="490" height="380" rx="8" fill="#181825"/>
+    <!-- Gradient border -->
+    <rect x="155" y="60" width="490" height="380" rx="8" fill="none" stroke="url(#panelBorder)" stroke-width="2"/>
+  </g>
+
+  <!-- Panel title bar -->
+  <rect x="157" y="62" width="486" height="28" rx="6" fill="#11111b"/>
+  <text x="175" y="81" font-family="monospace" font-size="12" fill="#89b4fa" font-weight="bold">♫ Now Playing</text>
+  <text x="575" y="81" font-family="monospace" font-size="10" fill="#585b70">Large</text>
+  <text x="615" y="81" font-family="monospace" font-size="12" fill="#585b70">✕</text>
+
+  <!-- Content area with two columns -->
+  <!-- Left column: Album art -->
+  <rect x="175" y="102" width="140" height="140" rx="6" fill="#313244"/>
+  <rect x="179" y="106" width="132" height="132" rx="4" fill="url(#artGrad)" opacity="0.85"/>
+  <!-- Abstract art pattern -->
+  <circle cx="220" cy="155" r="25" fill="#f38ba8" opacity="0.6"/>
+  <circle cx="260" cy="140" r="20" fill="#89b4fa" opacity="0.5"/>
+  <circle cx="240" cy="185" r="30" fill="#a6e3a1" opacity="0.4"/>
+  <circle cx="280" cy="175" r="15" fill="#f9e2af" opacity="0.5"/>
+  <rect x="195" y="150" width="60" height="40" rx="4" fill="#cba6f7" opacity="0.3"/>
+
+  <!-- Right column: Track info -->
+  <text x="335" y="122" font-family="monospace" font-size="10" fill="#585b70">TRACK</text>
+  <text x="335" y="142" font-family="monospace" font-size="16" fill="#cdd6f4" font-weight="bold">All The Small Things</text>
+
+  <text x="335" y="170" font-family="monospace" font-size="10" fill="#585b70">ARTIST</text>
+  <text x="335" y="188" font-family="monospace" font-size="14" fill="#89b4fa">blink-182</text>
+
+  <text x="335" y="214" font-family="monospace" font-size="10" fill="#585b70">ALBUM</text>
+  <text x="335" y="232" font-family="monospace" font-size="13" fill="#a6e3a1">Enema of the State</text>
+
+  <!-- Divider -->
+  <line x1="175" y1="258" x2="625" y2="258" stroke="#313244" stroke-width="1"/>
+
+  <!-- Progress section -->
+  <text x="175" y="283" font-family="monospace" font-size="11" fill="#6c7086">2:14</text>
+
+  <!-- Progress bar background -->
+  <rect x="215" y="273" width="350" height="10" rx="5" fill="#313244"/>
+  <!-- Progress bar fill -->
+  <rect x="215" y="273" width="207" height="10" rx="5" fill="url(#progressFill)"/>
+  <!-- Progress knob -->
+  <circle cx="422" cy="278" r="6" fill="#89b4fa"/>
+  <circle cx="422" cy="278" r="3" fill="#cdd6f4"/>
+
+  <text x="580" y="283" font-family="monospace" font-size="11" fill="#6c7086">3:47</text>
+
+  <!-- Playback visualization -->
+  <g transform="translate(175, 300)">
+    <rect x="0" y="18" width="3" height="8" rx="1" fill="#89b4fa" opacity="0.4"/>
+    <rect x="5" y="14" width="3" height="12" rx="1" fill="#89b4fa" opacity="0.5"/>
+    <rect x="10" y="8" width="3" height="18" rx="1" fill="#89b4fa" opacity="0.7"/>
+    <rect x="15" y="12" width="3" height="14" rx="1" fill="#89b4fa" opacity="0.6"/>
+    <rect x="20" y="16" width="3" height="10" rx="1" fill="#89b4fa" opacity="0.4"/>
+    <rect x="25" y="6" width="3" height="20" rx="1" fill="#b4befe" opacity="0.8"/>
+    <rect x="30" y="10" width="3" height="16" rx="1" fill="#b4befe" opacity="0.6"/>
+    <rect x="35" y="14" width="3" height="12" rx="1" fill="#b4befe" opacity="0.5"/>
+    <rect x="40" y="4" width="3" height="22" rx="1" fill="#cba6f7" opacity="0.7"/>
+    <rect x="45" y="12" width="3" height="14" rx="1" fill="#cba6f7" opacity="0.5"/>
+  </g>
+
+  <!-- Volume indicator -->
+  <text x="535" y="318" font-family="monospace" font-size="10" fill="#585b70">🔊 72%</text>
+  <rect x="575" y="310" width="50" height="4" rx="2" fill="#313244"/>
+  <rect x="575" y="310" width="36" height="4" rx="2" fill="#a6e3a1"/>
+
+  <!-- Divider -->
+  <line x1="175" y1="335" x2="625" y2="335" stroke="#313244" stroke-width="1"/>
+
+  <!-- Controls row -->
+  <g transform="translate(0, 350)">
+    <!-- Shuffle -->
+    <rect x="180" y="0" width="60" height="30" rx="4" fill="#313244"/>
+    <text x="193" y="14" font-family="monospace" font-size="8" fill="#585b70">[s]</text>
+    <text x="193" y="26" font-family="monospace" font-size="12" fill="#6c7086">🔀</text>
+
+    <!-- Previous -->
+    <rect x="250" y="0" width="60" height="30" rx="4" fill="#313244"/>
+    <text x="263" y="14" font-family="monospace" font-size="8" fill="#585b70">[b]</text>
+    <text x="263" y="26" font-family="monospace" font-size="12" fill="#bac2de">⏮</text>
+
+    <!-- Play/Pause - highlighted -->
+    <rect x="320" y="0" width="70" height="30" rx="4" fill="#89b4fa" opacity="0.15"/>
+    <rect x="320" y="0" width="70" height="30" rx="4" fill="none" stroke="#89b4fa" stroke-width="1"/>
+    <text x="337" y="14" font-family="monospace" font-size="8" fill="#89b4fa">[p]</text>
+    <text x="337" y="26" font-family="monospace" font-size="14" fill="#89b4fa">⏯</text>
+
+    <!-- Next -->
+    <rect x="400" y="0" width="60" height="30" rx="4" fill="#313244"/>
+    <text x="413" y="14" font-family="monospace" font-size="8" fill="#585b70">[n]</text>
+    <text x="413" y="26" font-family="monospace" font-size="12" fill="#bac2de">⏭</text>
+
+    <!-- Repeat -->
+    <rect x="470" y="0" width="60" height="30" rx="4" fill="#313244"/>
+    <text x="483" y="14" font-family="monospace" font-size="8" fill="#585b70">[r]</text>
+    <text x="483" y="26" font-family="monospace" font-size="12" fill="#6c7086">🔁</text>
+
+    <!-- Vol Up -->
+    <rect x="540" y="0" width="40" height="30" rx="4" fill="#313244"/>
+    <text x="548" y="14" font-family="monospace" font-size="8" fill="#585b70">[+]</text>
+    <text x="548" y="26" font-family="monospace" font-size="12" fill="#a6e3a1">🔊</text>
+
+    <!-- Vol Down -->
+    <rect x="590" y="0" width="40" height="30" rx="4" fill="#313244"/>
+    <text x="598" y="14" font-family="monospace" font-size="8" fill="#585b70">[-]</text>
+    <text x="598" y="26" font-family="monospace" font-size="12" fill="#f9e2af">🔉</text>
+  </g>
+
+  <!-- Status bar at bottom -->
+  <rect x="157" y="408" width="486" height="28" rx="6" fill="#11111b"/>
+  <text x="175" y="427" font-family="monospace" font-size="10" fill="#a6e3a1">● Playing</text>
+  <text x="265" y="427" font-family="monospace" font-size="10" fill="#585b70">│ Spotify │ Premium │ Desktop</text>
+  <text x="530" y="427" font-family="monospace" font-size="10" fill="#585b70">Layout: Large (60×24)</text>
+
+  <!-- Label badge -->
+  <rect x="336" y="452" width="128" height="22" rx="11" fill="#313244"/>
+  <text x="400" y="467" text-anchor="middle" font-family="monospace" font-size="10" fill="#89b4fa">▸ Responsive: Large</text>
+</svg>
