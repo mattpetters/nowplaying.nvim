@@ -1,6 +1,49 @@
-.PHONY: test test-file deps clean coverage coverage-report coverage-clean
+.PHONY: test test-file deps clean coverage coverage-report coverage-clean \
+        go-build go-test go-test-race go-test-cover go-lint go-vet \
+        nvim-test nvim-deps test-all
 
 NVIM ?= nvim
+GO ?= go
+BIN_DIR ?= bin
+
+# ----------------------------------------------------------------------------
+# Top-level
+# ----------------------------------------------------------------------------
+
+test-all: go-test nvim-test
+
+# ----------------------------------------------------------------------------
+# Go (daemon + TUI)
+# ----------------------------------------------------------------------------
+
+go-build:
+	$(GO) build -o $(BIN_DIR)/nowplayingd ./cmd/nowplayingd
+
+go-test:
+	$(GO) test ./...
+
+go-test-race:
+	$(GO) test -race ./...
+
+go-test-cover:
+	$(GO) test -coverprofile=coverage.txt -covermode=atomic ./...
+	$(GO) tool cover -func=coverage.txt | tail -1
+
+go-vet:
+	$(GO) vet ./...
+
+go-lint: go-vet
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run ./... || \
+		echo "golangci-lint not installed; ran go vet only"
+
+# ----------------------------------------------------------------------------
+# Neovim plugin (existing)
+# ----------------------------------------------------------------------------
+
+nvim-deps: deps
+
+nvim-test: test
+
 
 # Bootstrap mini.nvim dependency
 deps:

@@ -41,3 +41,13 @@ deps/
 luacov.stats.out
 luacov.stats.child.*.out
 luacov.report.out
+
+# Worktrees
+.worktrees/
+
+# Go build artifacts
+/bin/
+/build/
+*.test
+*.out
+coverage.txt
