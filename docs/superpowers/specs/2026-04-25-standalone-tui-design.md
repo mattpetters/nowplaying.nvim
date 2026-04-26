@@ -159,13 +159,122 @@ validate against.
   - Mouse: click progress bar to seek; click track row to play; scroll
     to navigate lists; right-click for context menu (planned, not v1).
 - **Artwork rendering.** Detect terminal via `TERM` and
-  `KITTY_WINDOW_ID` / `TERM_PROGRAM`. Use kitty graphics protocol or
-  iterm2 inline images when available; fall back to ASCII-art (using
-  `qeesung/image2ascii`) otherwise. Artwork only re-renders on track
-  change to avoid flicker.
+  `KITTY_WINDOW_ID` / `TERM_PROGRAM`. Target platform is Ghostty (kitty
+  graphics protocol); also supports kitty and iterm2 inline images, with
+  ASCII-art (`qeesung/image2ascii`) as last-resort fallback. Artwork is
+  passed through the active theme's filter pipeline (see Theming below)
+  before being emitted, and only re-renders on track change to avoid
+  flicker and re-running filters every frame.
+- **Theming.** Pluggable color palette + artwork filter pipeline. Default
+  preset matches today's plugin; `matrix` preset gives a green-on-black
+  CRT look with desaturated, tinted, dithered album art. Cycle with `t`,
+  override with `--theme <name>`, persisted to `~/.config/nowplaying/
+  ui.toml`. See "Theming" section below.
 - **Resilience.** If the daemon disconnects, the TUI shows a
   reconnecting banner and retries with exponential backoff. State is
   cached in-memory so the screen doesn't go blank.
+
+## Theming
+
+The TUI ships with a theme system from day one rather than retrofitted
+later. A theme is a color palette plus an artwork filter pipeline. Themes
+are a client-side UX preference — they live in client config, not in the
+daemon's `PlayerState`, so different surfaces (TUI, future menu bar,
+Neovim panel) can run different themes against the same playback state.
+
+### Package layout
+
+```
+internal/theme/                  # palette + style derivation
+├── theme.go                     # Theme struct, registry
+├── presets.go                   # default, matrix, …
+└── styles.go                    # lipgloss.Style derivation
+
+internal/artwork/filter/         # image-processing pipeline
+├── filter.go                    # Filter interface, Pipeline type
+├── desaturate.go                # luminance conversion
+├── tint.go                      # multiply by accent color
+├── dither.go                    # ordered (Bayer 4×4) dither
+├── posterize.go                 # quantize per-channel levels
+└── downsample.go                # nearest-neighbor for chunky-pixel feel
+```
+
+### Theme struct
+
+```go
+type Theme struct {
+    Name    string
+    Palette Palette
+    Artwork Pipeline   // ordered list of filters, may be empty
+}
+
+type Palette struct {
+    FG, BG, Accent, Dim, Border, Muted lipgloss.Color
+}
+```
+
+`internal/theme.Styles(t Theme)` returns a `Styles` struct with every
+lipgloss style the TUI uses (panel border, title, progress bar fill,
+key hint, etc.). The TUI's render path takes `Styles` from a single
+source — no hardcoded colors anywhere in `tui/`.
+
+### Built-in presets
+
+| Name | Palette | Artwork pipeline |
+|---|---|---|
+| `default` | Current plugin look (Spotify-green accent, terminal-default bg) | identity (no filtering) |
+| `matrix` | FG `#00ff41`, BG `#000000`, Accent `#00ff41`, Dim `#008f11`, Border `#003b00` | Downsample(64) → Desaturate → Tint(`#00ff41`) → Dither(Bayer4×4, 4 levels) |
+| `amber` (post-v1) | Amber CRT palette | Downsample → Desaturate → Tint(`#ffb000`) → Dither |
+
+### Artwork filter pipeline
+
+Filters are composable, ordered, and operate on `image.Image`:
+
+```go
+type Filter interface {
+    Apply(image.Image) image.Image
+}
+type Pipeline []Filter
+```
+
+The pipeline runs **once per `track.changed`** event in the TUI, not per
+frame. Output is a standard `image.Image` that is then encoded as PNG
+and emitted via the kitty graphics protocol — Ghostty handles the final
+upscale to terminal-cell dimensions, so the chunky-pixel effect comes
+through unchanged.
+
+Why downsample first: tinting a 640×640 album cover gives a smooth
+green image that doesn't read as "lo-fi". Downsampling to ~64×64 with
+nearest-neighbor before tinting + dithering yields visible square pixels
+once Ghostty stretches it back out, which is the look we want.
+
+### Configuration
+
+```
+~/.config/nowplaying/ui.toml
+─────────────────────────────
+[theme]
+name = "matrix"          # one of: default, matrix
+```
+
+CLI override: `nowplaying --theme matrix`.
+
+In-app: `t` cycles to the next registered theme and persists the choice.
+
+The Neovim plugin gets the same config file later (Phase 7+) and a
+`:NowPlayingTheme <name>` command. For now its panel keeps using
+`hl-groups` as today.
+
+### Testing
+
+- `internal/theme/`: registry lookup, fallback-to-default, TOML
+  round-trip, palette → styles derivation.
+- `internal/artwork/filter/`: golden-image tests — run each preset's
+  pipeline against `testdata/album.png`, byte-compare against
+  `testdata/album.matrix.golden.png` etc. Regenerate with
+  `go test -tags=update_goldens`.
+- TUI snapshot tests (`teatest`): one snapshot per theme for the
+  initial render so palette regressions show up in CI.
 
 #### `player.nvim` (refactored Lua plugin)
 
@@ -307,7 +416,9 @@ nowplaying.nvim/                 # repo root keeps this name for now
 │   │   └── macosmedia/
 │   ├── cache/                   # artwork cache
 │   ├── auth/                    # PKCE token store
-│   └── ipc/                     # socket server + client
+│   ├── ipc/                     # socket server + client
+│   ├── theme/                   # palette + lipgloss style derivation
+│   └── artwork/filter/          # image filter pipeline (desaturate, tint, dither)
 ├── tui/                         # Bubble Tea models + components
 ├── lua/player/                  # Neovim plugin (refactored)
 │   ├── daemon/
@@ -350,8 +461,11 @@ Phased so each phase compiles, tests pass, and the plugin still works:
    browsing.
 5. **Phase 5 — Artwork cache.** Replace ImageMagick with native Go
    download + serve local path.
-6. **Phase 6 — TUI.** Bubble Tea app, all panes, mouse + keyboard.
-   teatest snapshots.
+6. **Phase 6 — TUI + theming.** Bubble Tea app, all panes, mouse +
+   keyboard. `internal/theme` and `internal/artwork/filter` packages
+   land in the same phase so the TUI is themed from its first commit
+   (default + matrix presets). teatest snapshots cover both presets;
+   golden-image tests cover the filter pipeline.
 7. **Phase 7 — Refactor Neovim plugin.** Delete in-process providers,
    add `lua/player/daemon/client.lua`, wire the panel + Telescope to
    the daemon. Legacy fallback for users without daemon installed.
