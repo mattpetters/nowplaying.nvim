@@ -19,20 +19,24 @@ func init() {
 		Artwork: nil, // identity pipeline
 	})
 
+	// matrix: mactop "lime" aesthetic — sage green on black, muted phosphor.
+	// FG is the soft lime mactop uses for text/borders; Accent is the
+	// slightly brighter shade it uses for filled bar fills; Dim/Muted
+	// are darker shades for de-emphasized text and progress troughs.
 	register(Theme{
 		Name: "matrix",
 		Palette: Palette{
-			FG:     "#00ff41",
+			FG:     "#a8c989",
 			BG:     "#000000",
-			Accent: "#00ff41",
-			Dim:    "#008f11",
-			Border: "#003b00",
-			Muted:  "#005f0a",
+			Accent: "#b8d49a",
+			Dim:    "#6b8454",
+			Border: "#5a7142",
+			Muted:  "#3d4f2b",
 		},
 		Artwork: filter.Pipeline{
 			filter.Downsample{Size: 64},
 			filter.Desaturate{},
-			filter.HexTint("#00ff41"),
+			filter.HexTint("#a8c989"),
 			filter.Dither{Levels: 4},
 		},
 	})

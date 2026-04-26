@@ -206,11 +206,9 @@ func tickCmd() tea.Cmd {
 
 func (m Model) View() string {
 	if !m.conn {
-		banner := m.styles.Banner.Render("nowplaying — " + m.status)
+		banner := m.styles.Status.Render("nowplaying") + m.styles.Hint.Render(" — "+m.status)
 		hint := m.styles.Hint.Render("press q to quit")
-		return m.styles.Base.Width(m.width).Height(m.height).Render(
-			lipgloss.JoinVertical(lipgloss.Left, banner, "", hint),
-		)
+		return lipgloss.JoinVertical(lipgloss.Left, banner, "", hint)
 	}
 
 	header := m.styles.Title.Render(headerLine(m.state))
@@ -232,8 +230,7 @@ func (m Model) View() string {
 	)
 
 	bodyWidth := max(m.width-4, 20)
-	box := m.styles.Border.Width(bodyWidth).Render(body)
-	return m.styles.Base.Width(m.width).Height(m.height).Render(box)
+	return m.styles.Border.Width(bodyWidth).Render(body)
 }
 
 func headerLine(s proto.PlayerState) string {
