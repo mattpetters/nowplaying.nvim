@@ -18,6 +18,7 @@ test-all: go-test nvim-test
 
 go-build:
 	$(GO) build -o $(BIN_DIR)/nowplayingd ./cmd/nowplayingd
+	$(GO) build -o $(BIN_DIR)/nowplaying ./cmd/nowplaying
 
 go-test:
 	$(GO) test ./...
