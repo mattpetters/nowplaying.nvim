@@ -65,7 +65,7 @@ Mirror of `like` but with `spotify_library({"kind":"tracks", "action":"remove", 
 ### album
 
 1. Grab currently playing → `item.album.uri` + `item.album.name`
-2. `spotify_library({"kind": "albums", "action": "save", "ids": [<album_id>]})` — note: albums use `ids` (bare IDs), not `uris`. Strip the `spotify:album:` prefix to get the ID.
+2. `spotify_library({"kind": "albums", "action": "save", "items": [<album_id>]})` — note: the Hermes `spotify_library` tool wants `items` (bare IDs) for albums, not `ids` and not `uris`. Strip the `spotify:album:` prefix to get the ID. Passing `ids` returns "At least one Spotify item is required."
 3. Confirm: `💿 Saved album "<Album>" by <Artist> to your library.`
 
 ### unalbum
