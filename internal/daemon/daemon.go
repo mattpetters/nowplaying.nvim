@@ -163,6 +163,42 @@ func (d *Daemon) registerHandlers() {
 		return map[string]bool{"ok": true}, nil
 	})
 
+	d.server.Handle(proto.MethodSearchPlay, func(ctx context.Context, params json.RawMessage) (any, error) {
+		var sp proto.SearchPlayParams
+		if err := json.Unmarshal(params, &sp); err != nil {
+			return nil, &proto.Error{Code: proto.CodeInvalidParams, Message: err.Error()}
+		}
+		p := d.activeProvider()
+		if p == nil {
+			return nil, &proto.Error{Code: proto.CodeNotConnected, Message: "no active provider"}
+		}
+		up, ok := p.(providers.URIPlayer)
+		if !ok {
+			return nil, &proto.Error{Code: proto.CodeProviderError, Message: fmt.Sprintf("%s does not support URI playback", p.Name())}
+		}
+		d.machine.MarkCommandIssued()
+		if err := up.PlayURI(ctx, sp.URI); err != nil {
+			return nil, err
+		}
+		return map[string]bool{"ok": true}, nil
+	})
+
+	d.server.Handle(proto.MethodLikeToggle, func(ctx context.Context, _ json.RawMessage) (any, error) {
+		p := d.activeProvider()
+		if p == nil {
+			return nil, &proto.Error{Code: proto.CodeNotConnected, Message: "no active provider"}
+		}
+		lk, ok := p.(providers.Liker)
+		if !ok {
+			return nil, &proto.Error{Code: proto.CodeProviderError, Message: fmt.Sprintf("%s does not support like/unlike", p.Name())}
+		}
+		liked, err := lk.LikeToggle(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return proto.LikeToggleResult{Liked: liked}, nil
+	})
+
 	d.server.Handle(proto.MethodProviderList, func(ctx context.Context, _ json.RawMessage) (any, error) {
 		d.mu.RLock()
 		defer d.mu.RUnlock()
@@ -205,6 +241,18 @@ func (d *Daemon) transport(fn func(ctx context.Context, p providers.Provider) er
 		}
 		return map[string]bool{"ok": true}, nil
 	}
+}
+
+// BroadcastSpectrum sends audio spectrum data directly to all subscribed
+// clients, bypassing the state machine (spectrum is ephemeral).
+func (d *Daemon) BroadcastSpectrum(bands []float64, samples []float64) {
+	if d.server == nil {
+		return
+	}
+	d.server.Broadcast(proto.NotifyAudioSpectrum, proto.AudioSpectrum{
+		Bands:   bands,
+		Samples: samples,
+	})
 }
 
 func (d *Daemon) activeProvider() providers.Provider {

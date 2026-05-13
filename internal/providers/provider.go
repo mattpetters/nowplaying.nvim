@@ -35,3 +35,15 @@ type Provider interface {
 	Seek(ctx context.Context, ms int64) error
 	SetVolume(ctx context.Context, level int) error
 }
+
+// URIPlayer is optionally implemented by providers that can play a
+// specific track/search URI (e.g. "spotify:track:..." or "spotify:search:...").
+type URIPlayer interface {
+	PlayURI(ctx context.Context, uri string) error
+}
+
+// Liker is optionally implemented by providers that support
+// liking/unliking the currently playing track.
+type Liker interface {
+	LikeToggle(ctx context.Context) (liked bool, err error)
+}

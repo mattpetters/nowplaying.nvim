@@ -29,6 +29,12 @@ type Model struct {
 	state  proto.PlayerState
 
 	width, height int
+	viz           *visualizer
+
+	searchMode  bool
+	searchInput string
+	flash       string
+	flashExpiry time.Time
 }
 
 // New constructs the initial model.
@@ -39,6 +45,7 @@ func New(ctx context.Context, socketPath string, t theme.Theme) Model {
 		theme:      t,
 		styles:     theme.Build(t),
 		status:     "connecting...",
+		viz:        newVisualizer(20, 2),
 	}
 }
 
@@ -56,6 +63,8 @@ type disconnectedMsg struct{ err error }
 type notifMsg struct{ msg *proto.Message }
 type tickMsg time.Time
 type themeChangedMsg struct{ name string }
+type flashMsg struct{ text string }
+type likeResultMsg struct{ liked bool }
 
 // --- update ---
 
@@ -64,6 +73,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.viz.resize(max(m.width-8, 10), m.vizRows())
 		return m, nil
 
 	case connectedMsg:
@@ -89,14 +99,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listenCmd(m.client)
 
 	case tickMsg:
-		// Local progress interpolation between ticks. Keeps the bar moving
-		// even though the daemon only ticks 1Hz.
-		if m.state.Status == proto.StatusPlaying && m.state.Track != nil {
+		playing := m.state.Status == proto.StatusPlaying && m.state.Track != nil
+		if playing {
 			m.state.PositionMS += 100
 			if m.state.PositionMS > m.state.Track.DurationMS {
 				m.state.PositionMS = m.state.Track.DurationMS
 			}
 		}
+		m.viz.tick(playing)
 		return m, tickCmd()
 
 	case themeChangedMsg:
@@ -107,7 +117,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case flashMsg:
+		m.flash = msg.text
+		m.flashExpiry = time.Now().Add(3 * time.Second)
+		return m, nil
+
+	case likeResultMsg:
+		if msg.liked {
+			m.flash = "♥ liked"
+		} else {
+			m.flash = "♡ unliked"
+		}
+		m.flashExpiry = time.Now().Add(3 * time.Second)
+		return m, nil
+
 	case tea.KeyMsg:
+		if m.searchMode {
+			return m.handleSearchKey(msg)
+		}
 		return m.handleKey(msg)
 	}
 	return m, nil
@@ -128,6 +155,47 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "t":
 		next := theme.Next(m.theme.Name)
 		return m, func() tea.Msg { return themeChangedMsg{name: next} }
+	case "v":
+		m.viz.cycleMode()
+		return m, nil
+	case "/":
+		m.searchMode = true
+		m.searchInput = ""
+		return m, nil
+	case "l":
+		return m, likeCmd(m.client)
+	}
+	return m, nil
+}
+
+func (m Model) handleSearchKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch k.Type {
+	case tea.KeyEsc:
+		m.searchMode = false
+		m.searchInput = ""
+		return m, nil
+	case tea.KeyEnter:
+		query := strings.TrimSpace(m.searchInput)
+		m.searchMode = false
+		m.searchInput = ""
+		if query == "" {
+			return m, nil
+		}
+		return m, searchPlayCmd(m.client, query)
+	case tea.KeyBackspace:
+		runes := []rune(m.searchInput)
+		if len(runes) > 0 {
+			m.searchInput = string(runes[:len(runes)-1])
+		}
+		return m, nil
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeySpace:
+		m.searchInput += " "
+		return m, nil
+	case tea.KeyRunes:
+		m.searchInput += string(k.Runes)
+		return m, nil
 	}
 	return m, nil
 }
@@ -143,6 +211,11 @@ func applyNotification(m Model, msg *proto.Message) Model {
 		var p proto.ProgressTick
 		if err := json.Unmarshal(msg.Params, &p); err == nil {
 			m.state.PositionMS = p.PositionMS
+		}
+	case proto.NotifyAudioSpectrum:
+		var s proto.AudioSpectrum
+		if err := json.Unmarshal(msg.Params, &s); err == nil {
+			m.viz.feed(s.Bands, s.Samples)
 		}
 	}
 	return m
@@ -196,6 +269,35 @@ func callCmd(c *ipc.ConnClient, method string, params any) tea.Cmd {
 	}
 }
 
+func searchPlayCmd(c *ipc.ConnClient, query string) tea.Cmd {
+	if c == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		uri := "spotify:search:" + query
+		_, err := c.Call(context.Background(), proto.MethodSearchPlay, proto.SearchPlayParams{URI: uri})
+		if err != nil {
+			return flashMsg{text: "search failed"}
+		}
+		return flashMsg{text: "playing: " + query}
+	}
+}
+
+func likeCmd(c *ipc.ConnClient) tea.Cmd {
+	if c == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		raw, err := c.Call(context.Background(), proto.MethodLikeToggle, nil)
+		if err != nil {
+			return flashMsg{text: "like not available"}
+		}
+		var r proto.LikeToggleResult
+		_ = json.Unmarshal(raw, &r)
+		return likeResultMsg{liked: r.Liked}
+	}
+}
+
 func tickCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
@@ -212,17 +314,28 @@ func (m Model) View() string {
 	}
 
 	header := m.styles.Title.Render(headerLine(m.state))
-	artist := m.styles.Artist.Render(artistLine(m.state))
-	album := m.styles.Album.Render(albumLine(m.state))
+	artist := m.renderArtistAlbum()
 	status := m.styles.Status.Render(statusLine(m.state))
 	bar := m.renderProgress()
-	hints := m.styles.Hint.Render("space play/pause · n next · p prev · t theme (" + m.theme.Name + ") · q quit")
+	vizLine := m.styles.Progress.Render(m.viz.render())
+
+	var hints string
+	if m.searchMode {
+		hints = m.styles.Title.Render("/") + m.styles.Hint.Render(m.searchInput+"_")
+	} else {
+		hintParts := fmt.Sprintf("space play/pause · n/p track · / search · l like · t theme · v viz [%s] · q quit", m.viz.modeName())
+		if m.flash != "" && time.Now().Before(m.flashExpiry) {
+			hints = m.styles.Title.Render(m.flash) + "  " + m.styles.Hint.Render(hintParts)
+		} else {
+			hints = m.styles.Hint.Render(hintParts)
+		}
+	}
 
 	body := lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		artist,
-		album,
 		"",
+		vizLine,
 		bar,
 		status,
 		"",
@@ -240,18 +353,17 @@ func headerLine(s proto.PlayerState) string {
 	return s.Track.Title
 }
 
-func artistLine(s proto.PlayerState) string {
-	if s.Track == nil {
+func (m Model) renderArtistAlbum() string {
+	if m.state.Track == nil {
 		return ""
 	}
-	return s.Track.Artist
-}
-
-func albumLine(s proto.PlayerState) string {
-	if s.Track == nil || s.Track.Album == "" {
-		return ""
+	artist := m.styles.Artist.Render(m.state.Track.Artist)
+	if m.state.Track.Album == "" {
+		return artist
 	}
-	return s.Track.Album
+	sep := m.styles.Album.Render(" · ")
+	album := m.styles.Album.Render(m.state.Track.Album)
+	return artist + sep + album
 }
 
 func statusLine(s proto.PlayerState) string {
@@ -279,6 +391,19 @@ func (m Model) renderProgress() string {
 		m.styles.Track.Render(strings.Repeat("─", width-filled))
 	timing := fmt.Sprintf(" %s / %s", fmtMS(m.state.PositionMS), fmtMS(m.state.Track.DurationMS))
 	return bar + m.styles.Hint.Render(timing)
+}
+
+// vizRows computes the number of terminal rows available for the visualizer.
+// Chrome: header + artist + blank + progress + status + blank + hints = 7
+// Border: top + bottom = 2, plus 0 vertical padding.
+const vizChrome = 9
+
+func (m Model) vizRows() int {
+	rows := m.height - vizChrome
+	if rows < 2 {
+		return 2
+	}
+	return rows
 }
 
 func fmtMS(ms int64) string {

@@ -64,6 +64,7 @@ const (
 	MethodProviderSet      = "provider.set"
 	MethodSearchQuery      = "search.query"
 	MethodSearchPlay       = "search.play"
+	MethodLikeToggle       = "library.like.toggle"
 	MethodPlaylistList     = "playlist.list"
 	MethodPlaylistTracks   = "playlist.tracks"
 	MethodAuthStart        = "auth.start"
@@ -74,6 +75,7 @@ const (
 	NotifyProgressTick  = "progress.tick"
 	NotifyAuthRequired  = "auth.required"
 	NotifyError         = "error"
+	NotifyAudioSpectrum = "audio.spectrum"
 )
 
 // PlayerState is the canonical state served to clients.
@@ -130,6 +132,10 @@ type SearchQueryParams struct {
 type SearchPlayParams struct {
 	URI     string `json:"uri"`
 	Context string `json:"context,omitempty"` // optional album/playlist URI for "play in context"
+}
+
+type LikeToggleResult struct {
+	Liked bool `json:"liked"`
 }
 
 type SearchResult struct {
@@ -192,6 +198,11 @@ type ErrorNotification struct {
 	Provider string `json:"provider,omitempty"`
 	Code     int    `json:"code"`
 	Message  string `json:"message"`
+}
+
+type AudioSpectrum struct {
+	Bands   []float64 `json:"bands"`
+	Samples []float64 `json:"samples,omitempty"`
 }
 
 // NewRequest builds a JSON-RPC request with the given id.

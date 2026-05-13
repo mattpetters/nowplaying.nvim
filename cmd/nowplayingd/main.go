@@ -13,8 +13,11 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
+	"github.com/mpetters/nowplaying/internal/audio"
 	"github.com/mpetters/nowplaying/internal/daemon"
+	"github.com/mpetters/nowplaying/internal/providers/spotify"
 	"github.com/mpetters/nowplaying/internal/providers/stub"
 )
 
@@ -29,19 +32,72 @@ func main() {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	d := daemon.New(daemon.Config{
 		SocketPath: *socket,
 		Logger:     logger,
 	})
-	d.Register(stub.New())
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
+	sp := spotify.New()
+	if sp.Available(ctx) {
+		d.Register(sp)
+		logger.Info("registered spotify provider")
+	} else {
+		d.Register(stub.New())
+		logger.Info("spotify not available, using stub provider")
+	}
 
 	logger.Info("nowplayingd starting", "socket", *socket)
+	go runSpectrum(ctx, d, logger)
 	if err := d.Run(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "nowplayingd:", err)
 		os.Exit(1)
+	}
+}
+
+func runSpectrum(ctx context.Context, d *daemon.Daemon, logger *slog.Logger) {
+	cap := &audio.Capture{}
+	if !cap.Available() {
+		logger.Debug("audio capture not available on this platform")
+		return
+	}
+
+	if err := cap.Start("com.spotify.client"); err != nil {
+		logger.Warn("audio capture failed to start", "err", err)
+		return
+	}
+	defer cap.Stop()
+	logger.Info("audio capture started")
+
+	const (
+		fftSize    = 1024
+		bands      = 16
+		sampleRate = 44100
+	)
+	analyzer := audio.NewAnalyzer(fftSize, bands, sampleRate)
+	buf := make([]float32, 4096)
+
+	ticker := time.NewTicker(33 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n := cap.Read(buf)
+			if n < fftSize {
+				continue
+			}
+			window := buf[n-fftSize : n]
+			bands := analyzer.Process(window)
+			samples := make([]float64, fftSize)
+			for i, s := range window {
+				samples[i] = float64(s)
+			}
+			d.BroadcastSpectrum(bands, samples)
+		}
 	}
 }
 
