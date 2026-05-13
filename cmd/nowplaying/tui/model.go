@@ -31,8 +31,11 @@ type Model struct {
 	width, height int
 	viz           *visualizer
 
-	searchMode  bool
-	searchInput string
+	searchMode    bool
+	searchInput   string
+	searchResults []proto.Track
+	searchCursor  int
+
 	flash       string
 	flashExpiry time.Time
 }
@@ -65,6 +68,8 @@ type tickMsg time.Time
 type themeChangedMsg struct{ name string }
 type flashMsg struct{ text string }
 type likeResultMsg struct{ liked bool }
+type searchResultsMsg struct{ tracks []proto.Track }
+type authResultMsg struct{ err error }
 
 // --- update ---
 
@@ -131,7 +136,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flashExpiry = time.Now().Add(3 * time.Second)
 		return m, nil
 
+	case searchResultsMsg:
+		if len(msg.tracks) == 0 {
+			m.flash = "no results"
+			m.flashExpiry = time.Now().Add(3 * time.Second)
+			return m, nil
+		}
+		m.searchResults = msg.tracks
+		m.searchCursor = 0
+		return m, nil
+
+	case authResultMsg:
+		if msg.err != nil {
+			m.flash = "auth failed: " + msg.err.Error()
+		} else {
+			m.flash = "authenticated!"
+		}
+		m.flashExpiry = time.Now().Add(5 * time.Second)
+		return m, nil
+
 	case tea.KeyMsg:
+		if len(m.searchResults) > 0 {
+			return m.handleResultsKey(msg)
+		}
 		if m.searchMode {
 			return m.handleSearchKey(msg)
 		}
@@ -164,6 +191,10 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "l":
 		return m, likeCmd(m.client)
+	case "a":
+		m.flash = "opening browser for Spotify login..."
+		m.flashExpiry = time.Now().Add(120 * time.Second)
+		return m, authStartCmd(m.client)
 	}
 	return m, nil
 }
@@ -181,7 +212,9 @@ func (m Model) handleSearchKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if query == "" {
 			return m, nil
 		}
-		return m, searchPlayCmd(m.client, query)
+		m.flash = "searching..."
+		m.flashExpiry = time.Now().Add(10 * time.Second)
+		return m, searchQueryCmd(m.client, query)
 	case tea.KeyBackspace:
 		runes := []rune(m.searchInput)
 		if len(runes) > 0 {
@@ -196,6 +229,33 @@ func (m Model) handleSearchKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyRunes:
 		m.searchInput += string(k.Runes)
 		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) handleResultsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch k.String() {
+	case "j", "down":
+		if m.searchCursor < len(m.searchResults)-1 {
+			m.searchCursor++
+		}
+		return m, nil
+	case "k", "up":
+		if m.searchCursor > 0 {
+			m.searchCursor--
+		}
+		return m, nil
+	case "enter":
+		track := m.searchResults[m.searchCursor]
+		m.searchResults = nil
+		m.flash = "playing: " + track.Title
+		m.flashExpiry = time.Now().Add(3 * time.Second)
+		return m, playTrackCmd(m.client, track.URI)
+	case "esc":
+		m.searchResults = nil
+		return m, nil
+	case "q", "ctrl+c":
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -269,17 +329,50 @@ func callCmd(c *ipc.ConnClient, method string, params any) tea.Cmd {
 	}
 }
 
-func searchPlayCmd(c *ipc.ConnClient, query string) tea.Cmd {
+func searchQueryCmd(c *ipc.ConnClient, query string) tea.Cmd {
 	if c == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		uri := "spotify:search:" + query
+		raw, err := c.Call(context.Background(), proto.MethodSearchQuery, proto.SearchQueryParams{
+			Q:     query,
+			Type:  "track",
+			Limit: 10,
+		})
+		if err != nil {
+			return flashMsg{text: "search: " + err.Error()}
+		}
+		var result proto.SearchResult
+		if err := json.Unmarshal(raw, &result); err != nil {
+			return flashMsg{text: "search: bad response"}
+		}
+		return searchResultsMsg{tracks: result.Tracks}
+	}
+}
+
+func playTrackCmd(c *ipc.ConnClient, uri string) tea.Cmd {
+	if c == nil {
+		return nil
+	}
+	return func() tea.Msg {
 		_, err := c.Call(context.Background(), proto.MethodSearchPlay, proto.SearchPlayParams{URI: uri})
 		if err != nil {
-			return flashMsg{text: "search failed"}
+			return flashMsg{text: "play failed"}
 		}
-		return flashMsg{text: "playing: " + query}
+		return nil
+	}
+}
+
+func authStartCmd(c *ipc.ConnClient) tea.Cmd {
+	if c == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		_, err := c.Call(context.Background(), proto.MethodAuthStart, nil)
+		if err != nil {
+			return authResultMsg{err: err}
+		}
+		return authResultMsg{}
 	}
 }
 
@@ -317,13 +410,21 @@ func (m Model) View() string {
 	artist := m.renderArtistAlbum()
 	status := m.styles.Status.Render(statusLine(m.state))
 	bar := m.renderProgress()
-	vizLine := m.styles.Progress.Render(m.viz.render())
+
+	var middle string
+	if len(m.searchResults) > 0 {
+		middle = m.renderSearchResults()
+	} else {
+		middle = m.styles.Progress.Render(m.viz.render())
+	}
 
 	var hints string
-	if m.searchMode {
+	if len(m.searchResults) > 0 {
+		hints = m.styles.Hint.Render("j/k move · enter play · esc close · q quit")
+	} else if m.searchMode {
 		hints = m.styles.Title.Render("/") + m.styles.Hint.Render(m.searchInput+"_")
 	} else {
-		hintParts := fmt.Sprintf("space play/pause · n/p track · / search · l like · t theme · v viz [%s] · q quit", m.viz.modeName())
+		hintParts := fmt.Sprintf("space play/pause · n/p track · / search · l like · a auth · t theme · v viz [%s] · q quit", m.viz.modeName())
 		if m.flash != "" && time.Now().Before(m.flashExpiry) {
 			hints = m.styles.Title.Render(m.flash) + "  " + m.styles.Hint.Render(hintParts)
 		} else {
@@ -335,7 +436,7 @@ func (m Model) View() string {
 		header,
 		artist,
 		"",
-		vizLine,
+		middle,
 		bar,
 		status,
 		"",
@@ -344,6 +445,35 @@ func (m Model) View() string {
 
 	bodyWidth := max(m.width-4, 20)
 	return m.styles.Border.Width(bodyWidth).Render(body)
+}
+
+func (m Model) renderSearchResults() string {
+	maxW := max(m.width-12, 30)
+	var lines []string
+	for i, t := range m.searchResults {
+		cursor := "  "
+		if i == m.searchCursor {
+			cursor = "> "
+		}
+		dur := fmtMS(t.DurationMS)
+		line := fmt.Sprintf("%s%d  %s — %s", cursor, i+1, t.Title, t.Artist)
+		// Truncate if too long, leaving room for duration
+		durLen := len(dur) + 2
+		if len(line) > maxW-durLen {
+			line = line[:maxW-durLen-1] + "…"
+		}
+		padding := maxW - len(line) - len(dur)
+		if padding < 1 {
+			padding = 1
+		}
+		line += strings.Repeat(" ", padding) + dur
+		if i == m.searchCursor {
+			lines = append(lines, m.styles.Title.Render(line))
+		} else {
+			lines = append(lines, m.styles.Hint.Render(line))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func headerLine(s proto.PlayerState) string {

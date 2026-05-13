@@ -192,11 +192,77 @@ func (d *Daemon) registerHandlers() {
 		if !ok {
 			return nil, &proto.Error{Code: proto.CodeProviderError, Message: fmt.Sprintf("%s does not support like/unlike", p.Name())}
 		}
-		liked, err := lk.LikeToggle(ctx)
+		trackID := ""
+		if s := d.machine.Get(); s.Track != nil {
+			trackID = s.Track.ID
+		}
+		liked, err := lk.LikeToggle(ctx, trackID)
 		if err != nil {
 			return nil, err
 		}
 		return proto.LikeToggleResult{Liked: liked}, nil
+	})
+
+	d.server.Handle(proto.MethodSearchQuery, func(ctx context.Context, params json.RawMessage) (any, error) {
+		var sq proto.SearchQueryParams
+		if err := json.Unmarshal(params, &sq); err != nil {
+			return nil, &proto.Error{Code: proto.CodeInvalidParams, Message: err.Error()}
+		}
+		p := d.activeProvider()
+		if p == nil {
+			return nil, &proto.Error{Code: proto.CodeNotConnected, Message: "no active provider"}
+		}
+		sr, ok := p.(providers.Searcher)
+		if !ok {
+			return nil, &proto.Error{Code: proto.CodeProviderError, Message: fmt.Sprintf("%s does not support search", p.Name())}
+		}
+		tracks, err := sr.Search(ctx, sq.Q, sq.Limit)
+		if err != nil {
+			return nil, &proto.Error{Code: proto.CodeProviderError, Message: err.Error()}
+		}
+		result := proto.SearchResult{
+			Tracks: make([]proto.Track, len(tracks)),
+		}
+		for i, t := range tracks {
+			result.Tracks[i] = proto.Track{
+				ID:         t.ID,
+				URI:        t.URI,
+				Title:      t.Title,
+				Artist:     t.Artist,
+				Album:      t.Album,
+				DurationMS: t.DurationMS,
+				ArtworkURL: t.ArtworkURL,
+			}
+		}
+		return result, nil
+	})
+
+	d.server.Handle(proto.MethodAuthStart, func(ctx context.Context, _ json.RawMessage) (any, error) {
+		p := d.activeProvider()
+		if p == nil {
+			return nil, &proto.Error{Code: proto.CodeNotConnected, Message: "no active provider"}
+		}
+		au, ok := p.(providers.Authenticator)
+		if !ok {
+			return nil, &proto.Error{Code: proto.CodeProviderError, Message: fmt.Sprintf("%s does not support auth", p.Name())}
+		}
+		url, err := au.StartAuth(ctx)
+		if err != nil {
+			return nil, &proto.Error{Code: proto.CodeProviderError, Message: err.Error()}
+		}
+		return proto.AuthStartResult{URL: url}, nil
+	})
+
+	d.server.Handle(proto.MethodAuthStatus, func(_ context.Context, _ json.RawMessage) (any, error) {
+		p := d.activeProvider()
+		if p == nil {
+			return proto.AuthStatus{Connected: false}, nil
+		}
+		au, ok := p.(providers.Authenticator)
+		if !ok {
+			return proto.AuthStatus{Connected: true, Provider: p.Name()}, nil
+		}
+		return proto.AuthStatus{Connected: au.IsAuthenticated(), Provider: p.Name()}, nil
 	})
 
 	d.server.Handle(proto.MethodProviderList, func(ctx context.Context, _ json.RawMessage) (any, error) {

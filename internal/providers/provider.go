@@ -45,5 +45,30 @@ type URIPlayer interface {
 // Liker is optionally implemented by providers that support
 // liking/unliking the currently playing track.
 type Liker interface {
-	LikeToggle(ctx context.Context) (liked bool, err error)
+	LikeToggle(ctx context.Context, trackID string) (liked bool, err error)
+}
+
+// Searcher is optionally implemented by providers that support
+// searching for tracks via a web API.
+type Searcher interface {
+	Search(ctx context.Context, query string, limit int) ([]SearchTrack, error)
+}
+
+// SearchTrack is a search result track (decoupled from proto to avoid
+// import cycles in provider implementations).
+type SearchTrack struct {
+	ID         string
+	URI        string
+	Title      string
+	Artist     string
+	Album      string
+	DurationMS int64
+	ArtworkURL string
+}
+
+// Authenticator is optionally implemented by providers that require
+// OAuth or other external authentication flows.
+type Authenticator interface {
+	StartAuth(ctx context.Context) (url string, err error)
+	IsAuthenticated() bool
 }

@@ -1,7 +1,6 @@
 // Package spotify implements a Provider that controls the Spotify desktop
-// app via osascript (AppleScript). No auth or network calls — it shells
-// out to the local Spotify process, so it works whenever Spotify.app is
-// running.
+// app via osascript (AppleScript) for transport commands, and the Spotify
+// Web API for search and library operations.
 package spotify
 
 import (
@@ -14,15 +13,26 @@ import (
 	"time"
 
 	"github.com/mpetters/nowplaying/internal/proto"
+	"github.com/mpetters/nowplaying/internal/providers"
 	"github.com/mpetters/nowplaying/internal/state"
 )
 
 type Provider struct {
 	pollInterval time.Duration
+	tokens       *tokenStore
+	api          *apiClient
+	auth         *authFlow
 }
 
 func New() *Provider {
-	return &Provider{pollInterval: 1 * time.Second}
+	tokens := newTokenStore()
+	_ = tokens.load()
+	return &Provider{
+		pollInterval: 1 * time.Second,
+		tokens:       tokens,
+		api:          newAPIClient(tokens, defaultClientID),
+		auth:         newAuthFlow(defaultClientID, tokens),
+	}
 }
 
 func (p *Provider) Name() string { return "spotify" }
@@ -98,12 +108,13 @@ tell application "Spotify"
   set trackName to name of t
   set artistName to artist of t
   set albumName to album of t
+  set trackID to id of t
   set playerState to player state as string
   set pos to player position
   set dur to duration of t
   set vol to sound volume
 
-  return trackName & "||" & artistName & "||" & albumName & "||" & playerState & "||" & pos & "||" & dur & "||" & vol
+  return trackName & "||" & artistName & "||" & albumName & "||" & playerState & "||" & pos & "||" & dur & "||" & vol & "||" & trackID
 end tell
 `
 
@@ -122,26 +133,33 @@ func (p *Provider) poll() (state.Observation, error) {
 		}, nil
 	}
 
-	parts := strings.SplitN(out, "||", 7)
+	parts := strings.SplitN(out, "||", 8)
 	if len(parts) < 7 {
 		return state.Observation{}, fmt.Errorf("unexpected osascript output: %s", out)
 	}
 
 	status := parseStatus(parts[3])
-	positionSec := parseFloat(parts[4]) // AppleScript: seconds
-	durationMS := int64(parseFloat(parts[5])) // AppleScript: milliseconds
+	positionSec := parseFloat(parts[4])
+	durationMS := int64(parseFloat(parts[5]))
 	volume := parseInt(parts[6])
 	positionMS := int64(math.Round(positionSec * 1000))
 
+	track := &proto.Track{
+		Title:      parts[0],
+		Artist:     parts[1],
+		Album:      parts[2],
+		DurationMS: durationMS,
+	}
+	if len(parts) >= 8 {
+		uri := strings.TrimSpace(parts[7])
+		track.URI = uri
+		track.ID = strings.TrimPrefix(uri, "spotify:track:")
+	}
+
 	return state.Observation{
-		Provider: p.Name(),
-		Status:   status,
-		Track: &proto.Track{
-			Title:      parts[0],
-			Artist:     parts[1],
-			Album:      parts[2],
-			DurationMS: durationMS,
-		},
+		Provider:   p.Name(),
+		Status:     status,
+		Track:      track,
 		Volume:     volume,
 		PositionMS: positionMS,
 		SampledAt:  time.Now(),
@@ -173,14 +191,31 @@ func parseInt(s string) int {
 }
 
 func (p *Provider) PlayURI(_ context.Context, uri string) error {
+	if p.api.hasTokens() {
+		if err := p.api.play(uri); err == nil {
+			return nil
+		}
+	}
 	script := fmt.Sprintf(`tell application "Spotify" to play track "%s"`, uri)
 	_, err := runOsa(script)
 	return err
 }
 
-func (p *Provider) LikeToggle(_ context.Context) (bool, error) {
-	// Spotify AppleScript has no direct like API. Use System Events to
-	// click Song → Like in the menu bar. Returns true optimistically.
+func (p *Provider) LikeToggle(_ context.Context, trackID string) (bool, error) {
+	if trackID != "" && p.api.hasTokens() {
+		saved, err := p.api.isTrackSaved(trackID)
+		if err == nil {
+			if saved {
+				if err := p.api.removeTrack(trackID); err == nil {
+					return false, nil
+				}
+			} else {
+				if err := p.api.saveTrack(trackID); err == nil {
+					return true, nil
+				}
+			}
+		}
+	}
 	script := `
 tell application "System Events"
   tell process "Spotify"
@@ -193,6 +228,42 @@ return "ok"
 `
 	_, err := runOsa(script)
 	return true, err
+}
+
+func (p *Provider) Search(_ context.Context, query string, limit int) ([]providers.SearchTrack, error) {
+	tracks, err := p.api.search(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]providers.SearchTrack, len(tracks))
+	for i, t := range tracks {
+		artists := make([]string, len(t.Artists))
+		for j, a := range t.Artists {
+			artists[j] = a.Name
+		}
+		var art string
+		if len(t.Album.Images) > 0 {
+			art = t.Album.Images[0].URL
+		}
+		out[i] = providers.SearchTrack{
+			ID:         t.ID,
+			URI:        t.URI,
+			Title:      t.Name,
+			Artist:     strings.Join(artists, ", "),
+			Album:      t.Album.Name,
+			DurationMS: t.DurationMS,
+			ArtworkURL: art,
+		}
+	}
+	return out, nil
+}
+
+func (p *Provider) StartAuth(ctx context.Context) (string, error) {
+	return p.auth.startAndWait(ctx)
+}
+
+func (p *Provider) IsAuthenticated() bool {
+	return p.tokens.hasTokens()
 }
 
 func runOsa(script string) (string, error) {
