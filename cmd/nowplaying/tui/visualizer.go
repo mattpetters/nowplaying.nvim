@@ -31,9 +31,10 @@ const (
 	vizFlame
 	vizIPod
 	viz007
+	vizErotic
 )
 
-const vizModeCount = 10
+const vizModeCount = 11
 
 type particle struct {
 	x, y   float64
@@ -291,6 +292,8 @@ func (v *visualizer) render() string {
 		return v.renderIPod()
 	case viz007:
 		return v.render007()
+	case vizErotic:
+		return v.renderErotic()
 	default:
 		return v.renderEqualizer()
 	}

@@ -60,7 +60,7 @@ func vizModeName(m vizMode) string {
 	names := [...]string{
 		"equalizer", "wave", "helix",
 		"waterfall", "radial", "oscilloscope",
-		"particles", "flame", "ipod", "007",
+		"particles", "flame", "ipod", "007", "erotic",
 	}
 	if int(m) < len(names) {
 		return names[m]
