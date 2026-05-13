@@ -29,10 +29,11 @@ const (
 	vizOscilloscope
 	vizParticles
 	vizFlame
-	vizDancer
+	vizIPod
+	viz007
 )
 
-const vizModeCount = 9
+const vizModeCount = 10
 
 type particle struct {
 	x, y   float64
@@ -286,8 +287,10 @@ func (v *visualizer) render() string {
 		return v.renderParticles()
 	case vizFlame:
 		return v.renderFlame()
-	case vizDancer:
-		return v.renderDancer()
+	case vizIPod:
+		return v.renderIPod()
+	case viz007:
+		return v.render007()
 	default:
 		return v.renderEqualizer()
 	}
