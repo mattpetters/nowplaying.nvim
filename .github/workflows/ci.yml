@@ -18,10 +18,13 @@ jobs:
           neovim: true
           version: stable
 
-      - name: Install Lua 5.1 and luarocks
-        run: |
-          brew install lua@5.1 luarocks
-          echo "$(brew --prefix lua@5.1)/bin" >> $GITHUB_PATH
+      - name: Install Lua 5.1
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: "5.1"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v5
 
       - name: Install luacov
         run: |
