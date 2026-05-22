@@ -181,6 +181,27 @@ use({
 })
 ```
 
+### Global TUI commands
+
+Install the Go daemon and TUI commands into `${GOBIN:-$(go env GOPATH)/bin}`:
+
+```sh
+make go-install
+# or
+scripts/install.sh
+```
+
+This installs `nowplaying` and `nowplayingd`, then links `np` and `nplay` to the TUI command.
+
+```sh
+np          # start the daemon if needed, then open the TUI
+nplay       # same as np
+np --daemon # start only the daemon in the background
+np --daemon --debug # start the daemon in the foreground with debug logging
+```
+
+Make sure the install directory is on your `PATH`.
+
 ## Spotify Authentication 🔐
 
 This fork adds full Spotify Web API support via PKCE OAuth. To use Spotify search, playback control, and queue features:

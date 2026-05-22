@@ -1,5 +1,5 @@
 .PHONY: test test-file deps clean coverage coverage-report coverage-clean \
-        go-build go-test go-test-race go-test-cover go-lint go-vet \
+        go-build go-install go-test go-test-race go-test-cover go-lint go-vet \
         tui-iterate tui-iterate-clean \
         hermes-install hermes-uninstall \
         nvim-test nvim-deps test-all
@@ -21,6 +21,9 @@ test-all: go-test nvim-test
 go-build:
 	$(GO) build -o $(BIN_DIR)/nowplayingd ./cmd/nowplayingd
 	$(GO) build -o $(BIN_DIR)/nowplaying ./cmd/nowplaying
+
+go-install:
+	@bash scripts/install.sh
 
 go-test:
 	$(GO) test ./...
