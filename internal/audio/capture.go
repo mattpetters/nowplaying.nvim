@@ -6,9 +6,7 @@ var ErrNotSupported = errors.New("audio capture not supported on this platform")
 
 // Capture manages system audio capture. On macOS, it uses ScreenCaptureKit
 // to tap a specific application's audio output.
-type Capture struct {
-	running bool
-}
+type Capture struct{}
 
 // Available reports whether audio capture is available on this platform.
 func (c *Capture) Available() bool {

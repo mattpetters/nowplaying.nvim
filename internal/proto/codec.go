@@ -93,11 +93,8 @@ func readLine(br *bufio.Reader, maxLen int) ([]byte, error) {
 			continue
 		}
 		// EOF or other error.
-		if len(out)+len(chunk) > 0 {
-			out = append(out, chunk...)
-			if err == io.EOF {
-				return nil, io.ErrUnexpectedEOF
-			}
+		if len(out)+len(chunk) > 0 && err == io.EOF {
+			return nil, io.ErrUnexpectedEOF
 		}
 		return nil, err
 	}

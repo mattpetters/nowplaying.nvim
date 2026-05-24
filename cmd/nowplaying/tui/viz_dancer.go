@@ -101,13 +101,6 @@ var dancePoses = []dancePose{
 	},
 }
 
-var restPose = dancePose{
-	j(0.15, 0.82), j(0.22, 0.82),
-	j(0.18, 0.76), j(0.18, 0.88), j(0.10, 0.72), j(0.10, 0.92),
-	j(0.50, 0.82),
-	j(0.72, 0.78), j(0.72, 0.86), j(0.88, 0.76), j(0.88, 0.88),
-}
-
 var danceSequence = []int{
 	0, 1, 0, 1,
 	2, 3, 2, 3,
@@ -115,123 +108,6 @@ var danceSequence = []int{
 	10, 11, 10, 12,
 	4, 7, 5, 6,
 	1, 0, 11, 12,
-}
-
-func (v *visualizer) renderDancer() string {
-	rows := v.vizRows
-	dotRows := rows * 4
-	dotCols := v.bars * 2
-
-	grid := make([][]bool, dotRows)
-	for r := range grid {
-		grid[r] = make([]bool, dotCols)
-	}
-
-	t := float64(v.frame)
-	beatPhase := math.Mod(t, beatTicks) / beatTicks
-	beatNum := int(t / beatTicks)
-
-	seq := danceSequence
-	cur := seq[beatNum%len(seq)]
-	nxt := seq[(beatNum+1)%len(seq)]
-
-	eased := easeInOutCubic(beatPhase)
-	pose := lerpPose(dancePoses[cur], dancePoses[nxt], eased)
-
-	if v.playing {
-		bob := math.Sin(beatPhase*math.Pi*2) * 0.012
-		pose = offsetPose(pose, 0, bob)
-	} else {
-		restBlend := clampF(float64(v.frame)*0.1, 0, 1)
-		pose = lerpPose(pose, restPose, easeInOutCubic(restBlend))
-	}
-
-	const figAspect = 0.55
-	figH := float64(dotRows) * 0.95
-	figW := figH * figAspect
-	if figW > float64(dotCols)*0.90 {
-		figW = float64(dotCols) * 0.90
-		figH = figW / figAspect
-	}
-	ox := (float64(dotCols) - figW) / 2
-	oy := (float64(dotRows) - figH) / 2
-
-	sx := func(nx float64) int { return int(math.Round(ox + nx*figW)) }
-	sy := func(ny float64) int { return int(math.Round(oy + ny*figH)) }
-	rad := func(w float64) int { return max(int(math.Round(w*figH/2)), 1) }
-
-	headR := max(rad(0.060*1.8), 2)
-	neckR := max(rad(0.03), 1)
-	shR := max(rad(0.16), 2)
-	bustR := max(rad(0.26), 3)
-	waR := max(rad(0.04), 1)
-	hiR := max(rad(0.24), 3)
-	uaR := max(rad(0.014), 1)
-	laR := max(rad(0.010), 1)
-	haR := max(rad(0.008), 1)
-	ulR := max(rad(0.035), 2)
-	llR := max(rad(0.020), 1)
-	ftR := max(rad(0.014), 1)
-
-	if bustR < waR+2 {
-		bustR = waR + 2
-	}
-	if hiR < waR+2 {
-		hiR = waR + 2
-	}
-
-	// --- hair: asymmetric volume offset to one side ---
-	hairR := headR + max(headR/2, 1)
-	fillEllipse(grid, sx(pose.head.x)+1, sy(pose.head.y)-1, hairR, hairR+1, dotCols, dotRows)
-	fillCircle(grid, sx(pose.head.x), sy(pose.head.y), headR, dotCols, dotRows)
-
-	// --- neck: thin taper into shoulders ---
-	drawTaperedLine(grid, sx(pose.head.x), sy(pose.head.y)+headR,
-		sx(pose.neck.x), sy(pose.neck.y), neckR, shR, dotCols, dotRows)
-
-	// --- hourglass torso: shoulders → bust → waist → hips ---
-	neckY := sy(pose.neck.y)
-	hipY := sy(pose.hip.y)
-	neckX := sx(pose.neck.x)
-	hipX := sx(pose.hip.x)
-	torsoLen := max(hipY-neckY, 6)
-	bustY := neckY + torsoLen*20/100
-	bustX := neckX + (hipX-neckX)*20/100
-	waistY := neckY + torsoLen*50/100
-	waistX := neckX + (hipX-neckX)*50/100
-
-	drawTaperedLine(grid, neckX, neckY, bustX, bustY, shR, bustR, dotCols, dotRows)
-	drawTaperedLine(grid, bustX, bustY, waistX, waistY, bustR, waR, dotCols, dotRows)
-	drawTaperedLine(grid, waistX, waistY, hipX, hipY, waR, hiR, dotCols, dotRows)
-
-	// --- bust: horizontal ellipses at chest level ---
-	bustSpread := max(bustR*3/4, 2)
-	bustCircRx := max(bustR/2, 2)
-	bustCircRy := max(bustCircRx*2/3, 1)
-	fillEllipse(grid, bustX-bustSpread, bustY, bustCircRx, bustCircRy, dotCols, dotRows)
-	fillEllipse(grid, bustX+bustSpread, bustY, bustCircRx, bustCircRy, dotCols, dotRows)
-
-	// --- arms: kept very thin so they don't fill the waist gap ---
-	drawTaperedLine(grid, neckX, neckY,
-		sx(pose.lElbow.x), sy(pose.lElbow.y), uaR, laR, dotCols, dotRows)
-	drawTaperedLine(grid, sx(pose.lElbow.x), sy(pose.lElbow.y),
-		sx(pose.lHand.x), sy(pose.lHand.y), laR, haR, dotCols, dotRows)
-	drawTaperedLine(grid, neckX, neckY,
-		sx(pose.rElbow.x), sy(pose.rElbow.y), uaR, laR, dotCols, dotRows)
-	drawTaperedLine(grid, sx(pose.rElbow.x), sy(pose.rElbow.y),
-		sx(pose.rHand.x), sy(pose.rHand.y), laR, haR, dotCols, dotRows)
-
-	// --- legs (tapered: thicker at hip, thinner at ankle) ---
-	drawTaperedLine(grid, hipX, hipY,
-		sx(pose.lKnee.x), sy(pose.lKnee.y), ulR, llR, dotCols, dotRows)
-	drawTaperedLine(grid, sx(pose.lKnee.x), sy(pose.lKnee.y),
-		sx(pose.lFoot.x), sy(pose.lFoot.y), llR, ftR, dotCols, dotRows)
-	drawTaperedLine(grid, hipX, hipY,
-		sx(pose.rKnee.x), sy(pose.rKnee.y), ulR, llR, dotCols, dotRows)
-	drawTaperedLine(grid, sx(pose.rKnee.x), sy(pose.rKnee.y),
-		sx(pose.rFoot.x), sy(pose.rFoot.y), llR, ftR, dotCols, dotRows)
-
-	return gridToBrailleMultiRow(grid, dotCols, rows)
 }
 
 func lerpJoint(a, b djoint, t float64) djoint {
@@ -270,7 +146,8 @@ func easeInOutCubic(t float64) float64 {
 	if t < 0.5 {
 		return 4 * t * t * t
 	}
-	return 1 - math.Pow(-2*t+2, 3)/2
+	x := -2*t + 2
+	return 1 - (x*x*x)/2
 }
 
 func fillCircle(grid [][]bool, cx, cy, r, maxC, maxR int) {

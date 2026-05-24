@@ -92,13 +92,13 @@ func (a *authFlow) startAndWait(ctx context.Context) (string, error) {
 		}
 
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, successHTML)
+		_, _ = fmt.Fprint(w, successHTML)
 		done <- nil
 	})
 
 	srv := &http.Server{Handler: mux}
-	go srv.Serve(listener)
-	defer srv.Close()
+	go func() { _ = srv.Serve(listener) }()
+	defer func() { _ = srv.Close() }()
 
 	openBrowser(authPageURL)
 
@@ -125,7 +125,7 @@ func (a *authFlow) exchangeCode(code, verifier string) error {
 	if err != nil {
 		return fmt.Errorf("token exchange: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	var result struct {

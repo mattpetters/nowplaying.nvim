@@ -88,7 +88,7 @@ func (c *apiClient) refreshAccessToken() error {
 	if err != nil {
 		return fmt.Errorf("refresh request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	var result struct {
@@ -133,7 +133,7 @@ func (c *apiClient) request(method, path string, body []byte) (*http.Response, e
 	}
 
 	if resp.StatusCode == 401 {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err := c.refreshAccessToken(); err != nil {
 			return nil, fmt.Errorf("token refresh after 401: %w", err)
 		}
@@ -166,7 +166,7 @@ func (c *apiClient) search(query string, limit int) ([]apiTrack, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
@@ -186,7 +186,7 @@ func (c *apiClient) isTrackSaved(id string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	var result []bool
@@ -205,8 +205,8 @@ func (c *apiClient) saveTrack(id string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	io.ReadAll(resp.Body)
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("save track: HTTP %d", resp.StatusCode)
 	}
@@ -219,8 +219,8 @@ func (c *apiClient) removeTrack(id string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	io.ReadAll(resp.Body)
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("remove track: HTTP %d", resp.StatusCode)
 	}
@@ -239,8 +239,8 @@ func (c *apiClient) play(uri string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	io.ReadAll(resp.Body)
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("play: HTTP %d", resp.StatusCode)
 	}

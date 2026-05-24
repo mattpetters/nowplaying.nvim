@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -105,10 +104,7 @@ func (c *ConnClient) readLoop() {
 	for {
 		msg, err := c.reader.Read()
 		if err != nil {
-			if !errors.Is(err, io.EOF) && !c.closed.Load() {
-				// Best-effort: notify pending callers.
-			}
-			c.Close()
+			_ = c.Close()
 			return
 		}
 		if msg.IsResponse() {
