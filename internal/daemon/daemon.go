@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/mpetters/nowplaying/internal/ipc"
 	"github.com/mpetters/nowplaying/internal/proto"
@@ -30,9 +31,11 @@ type Daemon struct {
 	server  *ipc.Server
 	logger  *slog.Logger
 
-	mu        sync.RWMutex
-	providers []providers.Provider
-	active    providers.Provider
+	mu            sync.RWMutex
+	providers     []providers.Provider
+	active        providers.Provider
+	activeCancel  context.CancelFunc
+	activeRunning bool
 }
 
 func New(cfg Config) *Daemon {
@@ -46,15 +49,26 @@ func New(cfg Config) *Daemon {
 	}
 }
 
-// Register adds a provider. The first provider registered becomes the
-// active one until ProviderSet is called.
+// Register adds a provider. Providers are registered in priority order;
+// the first available provider becomes active.
 func (d *Daemon) Register(p providers.Provider) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.providers = append(d.providers, p)
-	if d.active == nil {
+	if d.active == nil && p.Available(context.Background()) {
 		d.active = p
 	}
+}
+
+// ActiveProviderName returns the name of the currently active provider,
+// or "none" if no provider is active.
+func (d *Daemon) ActiveProviderName() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.active == nil {
+		return "none"
+	}
+	return d.active.Name()
 }
 
 // Machine exposes the state machine for tests.
@@ -75,22 +89,21 @@ func (d *Daemon) Run(ctx context.Context) error {
 	defer d.machine.Unsubscribe(subID)
 	go d.forwardNotifications(ctx, ch)
 
-	// Start provider goroutines.
-	d.mu.RLock()
-	provs := append([]providers.Provider(nil), d.providers...)
-	d.mu.RUnlock()
-	var wg sync.WaitGroup
-	for _, p := range provs {
-		wg.Add(1)
-		go func(p providers.Provider) {
-			defer wg.Done()
-			if err := p.Run(ctx, d.machine); err != nil && !errors.Is(err, context.Canceled) {
-				d.logger.Error("provider stopped", "provider", p.Name(), "err", err)
-			}
-		}(p)
+	// If no provider was selected during registration (none available),
+	// fall back to the last registered provider (stub).
+	d.mu.Lock()
+	if d.active == nil && len(d.providers) > 0 {
+		d.active = d.providers[len(d.providers)-1]
 	}
+	d.mu.Unlock()
 
-	defer wg.Wait()
+	// Start only the active provider's goroutine.
+	d.startActiveProvider(ctx)
+
+	// Watch for provider availability changes (e.g. Spotify launched
+	// after daemon started with stub).
+	go d.watchProviders(ctx)
+
 	return d.server.Serve(ctx)
 }
 
@@ -325,4 +338,69 @@ func (d *Daemon) activeProvider() providers.Provider {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.active
+}
+
+func (d *Daemon) startActiveProvider(parent context.Context) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.active == nil || d.activeRunning {
+		return
+	}
+	ctx, cancel := context.WithCancel(parent)
+	d.activeCancel = cancel
+	d.activeRunning = true
+	p := d.active
+	go func() {
+		if err := p.Run(ctx, d.machine); err != nil && !errors.Is(err, context.Canceled) {
+			d.logger.Error("provider stopped", "provider", p.Name(), "err", err)
+		}
+		d.mu.Lock()
+		if d.active == p {
+			d.activeRunning = false
+		}
+		d.mu.Unlock()
+	}()
+}
+
+func (d *Daemon) stopActiveProvider() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.activeCancel != nil {
+		d.activeCancel()
+		d.activeCancel = nil
+		d.activeRunning = false
+	}
+}
+
+func (d *Daemon) watchProviders(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			d.mu.RLock()
+			current := d.active
+			provs := append([]providers.Provider(nil), d.providers...)
+			d.mu.RUnlock()
+
+			// Promote the first available provider that isn't stub.
+			// Provider list order = priority order.
+			for _, p := range provs {
+				if p.Name() == current.Name() {
+					break
+				}
+				if p.Available(ctx) {
+					d.logger.Info("provider became available, switching", "from", current.Name(), "to", p.Name())
+					d.stopActiveProvider()
+					d.mu.Lock()
+					d.active = p
+					d.mu.Unlock()
+					d.startActiveProvider(ctx)
+					break
+				}
+			}
+		}
+	}
 }

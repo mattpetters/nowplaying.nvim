@@ -39,14 +39,12 @@ func main() {
 		SocketPath: *socket,
 		Logger:     logger,
 	})
-	sp := spotify.New()
-	if sp.Available(ctx) {
-		d.Register(sp)
-		logger.Info("registered spotify provider")
-	} else {
-		d.Register(stub.New())
-		logger.Info("spotify not available, using stub provider")
-	}
+	// Register providers in priority order. The daemon auto-promotes
+	// the first available provider and watches for changes (e.g. Spotify
+	// launched after the daemon started).
+	d.Register(spotify.New())
+	d.Register(stub.New())
+	logger.Info("registered providers", "active", d.ActiveProviderName())
 
 	logger.Info("nowplayingd starting", "socket", *socket)
 	go runSpectrum(ctx, d, logger)
